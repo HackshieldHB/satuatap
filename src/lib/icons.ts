@@ -1,0 +1,57 @@
+import {
+  Zap,
+  Smartphone,
+  Wifi,
+  Droplets,
+  HeartPulse,
+  Router,
+  Building2,
+  Sunset,
+  Shield,
+  Moon,
+  Activity,
+  Clock,
+  Power,
+  Thermometer,
+  Crown,
+  Ticket,
+  Bike,
+  Bot,
+  Home,
+  Gift,
+  Star,
+  Bell,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
+
+/** Shared string→lucide resolver used across data-driven feature pages. */
+export const ICONS: Record<string, LucideIcon> = {
+  zap: Zap,
+  smartphone: Smartphone,
+  wifi: Wifi,
+  droplets: Droplets,
+  "heart-pulse": HeartPulse,
+  router: Router,
+  building: Building2,
+  sunset: Sunset,
+  shield: Shield,
+  moon: Moon,
+  activity: Activity,
+  clock: Clock,
+  power: Power,
+  thermometer: Thermometer,
+  crown: Crown,
+  ticket: Ticket,
+  bike: Bike,
+  bot: Bot,
+  home: Home,
+  gift: Gift,
+  star: Star,
+  bell: Bell,
+  sparkles: Sparkles,
+};
+
+export function resolveIcon(key: string, fallback: LucideIcon = Zap): LucideIcon {
+  return ICONS[key] ?? fallback;
+}
