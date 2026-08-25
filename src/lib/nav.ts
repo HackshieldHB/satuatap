@@ -1,3 +1,52 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  Home,
+  Cpu,
+  DoorOpen,
+  Bot,
+  Zap,
+  Droplets,
+  Thermometer,
+  Bell,
+  Activity,
+  Server,
+  LayoutGrid,
+  CreditCard,
+  Settings,
+  User,
+  Sparkles,
+} from "lucide-react";
+
+export type NavItem = { href: string; label: string; icon: LucideIcon };
+
+export const MAIN_NAV: NavItem[] = [
+  { href: "/", label: "Beranda", icon: Home },
+  { href: "/devices", label: "Perangkat", icon: Cpu },
+  { href: "/rooms", label: "Ruangan", icon: DoorOpen },
+  { href: "/environment", label: "Lingkungan", icon: Thermometer },
+  { href: "/energy", label: "Energi", icon: Zap },
+  { href: "/water", label: "Air", icon: Droplets },
+  { href: "/alerts", label: "Peringatan", icon: Bell },
+  { href: "/ai", label: "Otomatisasi", icon: Bot },
+  { href: "/system", label: "Sistem", icon: Server },
+  { href: "/services", label: "Layanan", icon: LayoutGrid },
+  { href: "/payments", label: "Pembayaran", icon: CreditCard },
+  { href: "/notifications", label: "Notifikasi", icon: Activity },
+];
+
+export const BOTTOM_NAV: NavItem[] = [
+  { href: "/settings", label: "Pengaturan", icon: Settings },
+  { href: "/profile", label: "Profil", icon: User },
+];
+
+export const MOBILE_NAV: NavItem[] = [
+  { href: "/", label: "Beranda", icon: Home },
+  { href: "/devices", label: "Perangkat", icon: Cpu },
+  { href: "/alerts", label: "Alert", icon: Bell },
+  { href: "/ai", label: "AI", icon: Sparkles },
+  { href: "/profile", label: "Profil", icon: User },
+];
+
 /**
  * Determine whether a nav item should render as active for the current path.
  *

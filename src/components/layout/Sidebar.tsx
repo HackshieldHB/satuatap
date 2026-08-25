@@ -2,51 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Home,
-  Cpu,
-  Sparkles,
-  LayoutGrid,
-  User,
-  ChevronLeft,
-  ChevronRight,
-  Settings,
-  Bell,
-  Zap,
-  Droplets,
-  DoorOpen,
-  Bot,
-  CreditCard,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { computeActive } from "@/lib/nav";
+import { computeActive, MAIN_NAV, BOTTOM_NAV, MOBILE_NAV } from "@/lib/nav";
 import { Logo } from "./Logo";
 import { useState } from "react";
-
-const mainNavItems = [
-  { href: "/", label: "Beranda", icon: Home },
-  { href: "/devices", label: "Perangkat", icon: Cpu },
-  { href: "/rooms", label: "Ruangan", icon: DoorOpen },
-  { href: "/ai", label: "Otomatisasi", icon: Bot },
-  { href: "/energy", label: "Energi", icon: Zap },
-  { href: "/water", label: "Air", icon: Droplets },
-  { href: "/services", label: "Layanan", icon: LayoutGrid },
-  { href: "/payments", label: "Pembayaran", icon: CreditCard },
-  { href: "/notifications", label: "Notifikasi", icon: Bell },
-];
-
-const bottomNavItems = [
-  { href: "/settings", label: "Pengaturan", icon: Settings },
-  { href: "/profile", label: "Profil", icon: User },
-];
-
-const mobileNavItems = [
-  { href: "/", label: "Beranda", icon: Home },
-  { href: "/devices", label: "Perangkat", icon: Cpu },
-  { href: "/ai", label: "AI", icon: Sparkles },
-  { href: "/services", label: "Layanan", icon: LayoutGrid },
-  { href: "/profile", label: "Profil", icon: User },
-];
 
 
 export function Sidebar() {
@@ -78,7 +38,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
-        {mainNavItems.map((item) => {
+        {MAIN_NAV.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
           return (
@@ -101,7 +61,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-border p-2 space-y-1">
-        {bottomNavItems.map((item) => {
+        {BOTTOM_NAV.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
           return (
@@ -137,7 +97,7 @@ export function BottomNav() {
       aria-label="Navigasi utama"
     >
       <div className="flex items-center justify-around h-16">
-        {mobileNavItems.map((item) => {
+        {MOBILE_NAV.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
           return (

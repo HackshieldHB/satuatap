@@ -15,6 +15,12 @@ declare module "@fastify/jwt" {
 }
 
 export async function authenticate(req: FastifyRequest, reply: FastifyReply) {
+  const query = req.query as { access_token?: string };
+  if (typeof query.access_token === "string" && query.access_token.length > 0) {
+    if (!req.headers.authorization) {
+      req.headers.authorization = `Bearer ${query.access_token}`;
+    }
+  }
   try {
     await req.jwtVerify();
   } catch {

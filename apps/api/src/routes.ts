@@ -938,10 +938,13 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!(await requireHomeRole(req.user.sub, homeId))) {
       return reply.code(403).send({ success: false, error: "Forbidden" });
     }
+    const origin = typeof req.headers.origin === "string" ? req.headers.origin : "*";
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Credentials": "true",
     });
     const send = (evt: AppEvent) => {
       reply.raw.write(`data: ${JSON.stringify(evt)}\n\n`);

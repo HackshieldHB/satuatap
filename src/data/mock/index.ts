@@ -23,6 +23,11 @@ import type {
   Promo,
   MonthlyReport,
   Order,
+  HomeAlert,
+  AlertThreshold,
+  EnvironmentDetail,
+  SystemHealth,
+  TelemetryPoint,
 } from "@/types";
 
 export const MOCK_USER: User = {
@@ -271,6 +276,41 @@ export const MOCK_DEVICES: Device[] = [
   { id: "dev-v6", homeId: "home-2", roomId: "room-v3", name: "Meter Listrik Villa", type: "electricity_meter", protocol: "mqtt", status: "online", room: "Dapur", value: "2.10 kWh", lastUpdated: "2026-08-17T13:45:00Z" },
   { id: "dev-v7", homeId: "home-2", roomId: "room-v4", name: "Lampu Teras Villa", type: "light", protocol: "wifi", status: "online", room: "Teras", value: "ON", isOn: true, lastUpdated: "2026-08-17T13:30:00Z" },
 ];
+
+const DEVICE_NODE_ID: Record<string, string> = {
+  "energy-main": "esp32-energy-001",
+  "energy-ac": "esp32-energy-001",
+  "water-main": "esp32-water-env-001",
+  "water-kitchen": "esp32-water-env-001",
+  "env-living-room": "esp32-water-env-001",
+  "env-bedroom": "esp32-water-env-001",
+  "pir-living-room": "esp32-water-env-001",
+  "pir-bedroom": "esp32-water-env-001",
+  "light-living-room": "esp32-lighting-001",
+  "light-bedroom": "esp32-lighting-001",
+  "light-kitchen": "esp32-lighting-001",
+  "light-spare": "esp32-lighting-001",
+};
+
+const NODE_META: Record<string, { firmware: string; build: number; ipBase: string }> = {
+  "esp32-energy-001": { firmware: "1.2.0", build: 48, ipBase: "192.168.1.21" },
+  "esp32-water-env-001": { firmware: "1.1.4", build: 36, ipBase: "192.168.1.22" },
+  "esp32-lighting-001": { firmware: "1.3.1", build: 52, ipBase: "192.168.1.23" },
+};
+
+MOCK_DEVICES.forEach((d, i) => {
+  const nodeId = DEVICE_NODE_ID[d.id];
+  if (!nodeId) return;
+  const meta = NODE_META[nodeId];
+  d.nodeId = nodeId;
+  d.lastSeen = d.lastUpdated;
+  d.firmware = { model: nodeId, version: meta.firmware };
+  d.buildNumber = meta.build;
+  d.ipAddress = meta.ipBase;
+  d.macAddress = `A4:CF:12:${(10 + i).toString(16).padStart(2, "0").toUpperCase()}:0${i % 10}:C${i % 10}`;
+  if (d.id.startsWith("energy")) d.config = { ctRatio: 1, offsetKwh: 0 };
+  if (d.id.startsWith("water")) d.config = { pulsesPerLiter: 450, offsetLiters: 0 };
+});
 
 export const MOCK_DASHBOARD: DashboardData = {
   homeStatus: "normal",
@@ -598,6 +638,13 @@ export const ENERGY_HISTORY = [
   { label: "Jum", value: 6.2 },
   { label: "Sab", value: 5.4 },
   { label: "Min", value: 4.82 },
+];
+
+export const ENERGY_HISTORY_MONTH = [
+  { label: "M1", value: 32 },
+  { label: "M2", value: 28 },
+  { label: "M3", value: 35 },
+  { label: "M4", value: 30 },
 ];
 
 export const WATER_HISTORY = [
@@ -1322,3 +1369,192 @@ export const SPEND_HISTORY = [
   { label: "Jun", value: 351 },
   { label: "Jul", value: 315 },
 ];
+
+function envHistory(base: number): { label: string; value: number }[] {
+  return ["00", "04", "08", "12", "16", "20"].map((h, i) => ({
+    label: h,
+    value: Number((base + Math.sin(i) * 1.2).toFixed(1)),
+  }));
+}
+
+export const MOCK_ENVIRONMENT_DETAIL: EnvironmentDetail = {
+  homeId: "home-1",
+  rooms: [
+    {
+      deviceId: "env-living-room",
+      room: "Ruang Tamu",
+      temperature: 24.8,
+      humidity: 68,
+      min: 23.1,
+      max: 26.4,
+      avg: 24.6,
+      history: envHistory(24.8),
+    },
+    {
+      deviceId: "env-bedroom",
+      room: "Kamar Tidur",
+      temperature: 23.4,
+      humidity: 71,
+      min: 22.0,
+      max: 24.8,
+      avg: 23.3,
+      history: envHistory(23.4),
+    },
+  ],
+  motion: [
+    {
+      deviceId: "pir-living-room",
+      room: "Ruang Tamu",
+      lastDetected: "2026-08-25T12:10:00Z",
+      hours: Array.from({ length: 24 }, (_, h) => h >= 6 && h <= 22 && h % 3 !== 0),
+    },
+    {
+      deviceId: "pir-bedroom",
+      room: "Kamar Tidur",
+      lastDetected: "2026-08-25T06:40:00Z",
+      hours: Array.from({ length: 24 }, (_, h) => h >= 5 && h <= 7),
+    },
+  ],
+};
+
+export const MOCK_ALERTS: HomeAlert[] = [
+  {
+    id: "alert-1",
+    homeId: "home-1",
+    deviceId: "energy-ac",
+    roomId: "room-2",
+    severity: "warning",
+    type: "HIGH_ELECTRICITY",
+    title: "Pemakaian listrik tinggi",
+    message: "Daya AC kamar tidur melewati ambang 3000 W.",
+    status: "open",
+    createdAt: "2026-08-25T13:10:00Z",
+    deviceName: "Energy AC",
+    roomName: "Kamar Tidur",
+  },
+  {
+    id: "alert-2",
+    homeId: "home-1",
+    deviceId: "water-kitchen",
+    roomId: "room-3",
+    severity: "critical",
+    type: "POSSIBLE_LEAK",
+    title: "Aliran air tidak wajar",
+    message: "Aliran dapur > 15 L/m selama 10 menit.",
+    status: "open",
+    createdAt: "2026-08-25T12:40:00Z",
+    deviceName: "Water Kitchen",
+    roomName: "Dapur",
+  },
+  {
+    id: "alert-3",
+    homeId: "home-1",
+    deviceId: "pir-bedroom",
+    roomId: "room-2",
+    severity: "info",
+    type: "DEVICE_OFFLINE",
+    title: "Sensor sempat terputus",
+    message: "PIR kamar tidak merespons selama 6 menit.",
+    status: "acknowledged",
+    createdAt: "2026-08-25T09:00:00Z",
+    acknowledgedAt: "2026-08-25T09:12:00Z",
+    deviceName: "Bedroom Motion",
+    roomName: "Kamar Tidur",
+  },
+  {
+    id: "alert-4",
+    homeId: "home-1",
+    deviceId: "water-main",
+    roomId: "room-3",
+    severity: "warning",
+    type: "ABNORMAL_WATER",
+    title: "Pemakaian air di atas median",
+    message: "Volume harian 2× median 7 hari.",
+    status: "resolved",
+    createdAt: "2026-08-24T18:00:00Z",
+    deviceName: "Water Main",
+    roomName: "Dapur",
+  },
+];
+
+export const MOCK_ALERT_THRESHOLDS: AlertThreshold[] = [
+  {
+    id: "thr-1",
+    homeId: "home-1",
+    type: "HIGH_ELECTRICITY",
+    metric: "power",
+    op: "gt",
+    value: 3000,
+    forSeconds: 0,
+    severity: "warning",
+    enabled: true,
+  },
+  {
+    id: "thr-2",
+    homeId: "home-1",
+    type: "POSSIBLE_LEAK",
+    metric: "flow_lpm",
+    op: "gt",
+    value: 15,
+    forSeconds: 600,
+    severity: "critical",
+    enabled: true,
+  },
+  {
+    id: "thr-3",
+    homeId: "home-1",
+    type: "DEVICE_OFFLINE",
+    metric: "last_seen_age_s",
+    op: "gt",
+    value: 300,
+    forSeconds: 0,
+    severity: "warning",
+    enabled: true,
+  },
+  {
+    id: "thr-4",
+    homeId: "home-1",
+    type: "ABNORMAL_WATER",
+    metric: "volume_liters",
+    op: "gt",
+    value: 2,
+    forSeconds: 0,
+    severity: "warning",
+    enabled: true,
+  },
+];
+
+export const MOCK_SYSTEM_HEALTH: SystemHealth = {
+  pi: "up",
+  mqtt: "up",
+  database: "up",
+  cloud: "up",
+  nodes: [
+    { nodeId: "esp32-energy-001", status: "up", lastSeen: "2026-08-25T13:45:00Z", deviceCount: 2, onlineCount: 2 },
+    { nodeId: "esp32-water-env-001", status: "up", lastSeen: "2026-08-25T13:45:00Z", deviceCount: 6, onlineCount: 6 },
+    { nodeId: "esp32-lighting-001", status: "up", lastSeen: "2026-08-25T13:45:00Z", deviceCount: 4, onlineCount: 4 },
+  ],
+  backlog: 0,
+  lastSync: "2026-08-25T13:44:00Z",
+  localMode: false,
+};
+
+export function mockDeviceTelemetry(deviceId: string): TelemetryPoint[] {
+  const now = Date.now();
+  return Array.from({ length: 8 }, (_, i) => {
+    const ts = new Date(now - i * 15 * 60_000).toISOString();
+    if (deviceId.startsWith("env-")) {
+      return { deviceId, homeId: "home-1", timestamp: ts, metrics: { temperature_c: 24.1 + i * 0.1, humidity_pct: 66 + i } };
+    }
+    if (deviceId.startsWith("pir-")) {
+      return { deviceId, homeId: "home-1", timestamp: ts, metrics: { motion: i === 2 } };
+    }
+    if (deviceId.startsWith("energy")) {
+      return { deviceId, homeId: "home-1", timestamp: ts, metrics: { power: 420 + i * 10, energy_kwh: 4.7 + i * 0.02 } };
+    }
+    if (deviceId.startsWith("water")) {
+      return { deviceId, homeId: "home-1", timestamp: ts, metrics: { flow_lpm: 2.1, volume_liters: 120 + i } };
+    }
+    return { deviceId, homeId: "home-1", timestamp: ts, metrics: { on: i % 2 === 0 } };
+  });
+}

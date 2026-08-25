@@ -26,7 +26,10 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import type { Device } from "@/types";
 import { cn } from "@/lib/utils";
 import { deviceService } from "@/services/home.service";
-import { useState } from "react";
+import { telemetryService } from "@/services/telemetry.service";
+import { useState, useEffect } from "react";
+import { formatRelativeTime } from "@/lib/utils";
+import type { TelemetryPoint } from "@/types";
 
 const deviceIcons: Record<string, LucideIcon> = {
   light: Lightbulb,
@@ -76,6 +79,14 @@ export function DeviceCard({
   const [isOn, setIsOn] = useState(device.isOn);
   const [open, setOpen] = useState(false);
   const [targetTemp, setTargetTemp] = useState(23);
+  const [telemetry, setTelemetry] = useState<TelemetryPoint[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    void telemetryService.getDeviceTelemetry(device.homeId, device.id).then((res) => {
+      if (res.success && res.data) setTelemetry(res.data.slice(0, 6));
+    });
+  }, [open, device.homeId, device.id]);
 
   const isClimate = /\bac\b/i.test(device.name);
 
@@ -93,14 +104,7 @@ export function DeviceCard({
   const online = device.status === "online";
   const canControl =
     online &&
-    (device.isOn !== undefined ||
-      Boolean(device.capabilities?.includes("on_off")));
-  const lastUpdated = new Date(device.lastUpdated).toLocaleString("id-ID", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+    (device.isOn !== undefined || Boolean(device.capabilities?.includes("on_off")));
 
   return (
     <>
@@ -137,6 +141,9 @@ export function DeviceCard({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{device.name}</p>
           <p className="text-xs text-muted">{device.room}</p>
+          {device.nodeId && (
+            <p className="text-[11px] text-muted">{device.nodeId}</p>
+          )}
           {device.value && (
             <p className="text-xs font-medium text-foreground mt-0.5">
               {device.value}
@@ -197,8 +204,57 @@ export function DeviceCard({
                 value={device.protocol.toUpperCase()}
               />
             )}
-            <InfoTile icon={Clock} label="Diperbarui" value={lastUpdated} />
+            <InfoTile
+              icon={Clock}
+              label="Terakhir terlihat"
+              value={formatRelativeTime(device.lastSeen || device.lastUpdated)}
+            />
+            {device.nodeId && (
+              <InfoTile icon={Cpu} label="Node" value={device.nodeId} />
+            )}
+            {device.firmware?.version && (
+              <InfoTile
+                icon={Cpu}
+                label="Firmware"
+                value={`${device.firmware.version}${device.buildNumber ? ` (${device.buildNumber})` : ""}`}
+              />
+            )}
+            {device.ipAddress && (
+              <InfoTile icon={Wifi} label="IP" value={device.ipAddress} />
+            )}
+            {device.macAddress && (
+              <InfoTile icon={Wifi} label="MAC" value={device.macAddress} />
+            )}
           </div>
+
+          {device.config && Object.keys(device.config).length > 0 && (
+            <div className="rounded-lg bg-background p-3">
+              <p className="text-[11px] text-muted mb-1">Kalibrasi</p>
+              <dl className="grid grid-cols-2 gap-1 text-sm">
+                {Object.entries(device.config).map(([k, v]) => (
+                  <div key={k}>
+                    <dt className="text-xs text-muted">{k}</dt>
+                    <dd className="font-medium">{String(v)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+
+          {telemetry.length > 0 && (
+            <div className="rounded-lg bg-background p-3 space-y-1">
+              <p className="text-[11px] text-muted mb-1">Telemetry terbaru</p>
+              {telemetry.map((row) => (
+                <p key={row.timestamp} className="text-xs text-muted truncate">
+                  {new Date(row.timestamp).toLocaleTimeString("id-ID", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}{" "}
+                  · {JSON.stringify(row.metrics)}
+                </p>
+              ))}
+            </div>
+          )}
 
           {online && isClimate && isOn && (
             <div className="flex flex-col items-center gap-2">

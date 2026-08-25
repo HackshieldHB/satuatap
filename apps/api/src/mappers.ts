@@ -77,6 +77,11 @@ export function mapDevice(
       model: d.firmwareModel ?? undefined,
       version: d.firmwareVersion ?? undefined,
     },
+    nodeId: d.nodeId ?? undefined,
+    macAddress: d.macAddress ?? undefined,
+    ipAddress: d.ipAddress ?? undefined,
+    buildNumber: d.buildNumber ?? undefined,
+    config: (d.config as Record<string, unknown> | null) ?? undefined,
   };
 }
 

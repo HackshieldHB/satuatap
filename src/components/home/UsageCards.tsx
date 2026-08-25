@@ -93,6 +93,9 @@ export function EnvironmentCard({ data, className }: { data: EnvironmentData; cl
       {data.airQuality && (
         <p className="text-xs text-success font-medium mt-3">{airLabels[data.airQuality]}</p>
       )}
+      <Link href="/environment" className="group/cta text-xs font-medium text-primary mt-3 inline-flex items-center gap-0.5">
+        Lihat Lingkungan <ChevronRight className="h-3 w-3 transition-transform group-hover/cta:translate-x-0.5" />
+      </Link>
     </Card>
   );
 }

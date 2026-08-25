@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart } from "@/components/charts/BarChart";
+import { Bar } from "@/components/charts";
 import { Card } from "@/components/ui/Card";
-import { formatCurrency, cn } from "@/lib/utils";
+import { SegmentedControl } from "@/components/ui/Tabs";
+import { formatCurrency, formatNumber, cn } from "@/lib/utils";
 import {
   ArrowLeft,
   TrendingDown,
@@ -11,6 +12,19 @@ import {
   Lightbulb,
   type LucideIcon,
 } from "lucide-react";
+import type { UsagePeriod } from "@/types";
+
+const PERIOD_OPTIONS: { id: UsagePeriod; label: string }[] = [
+  { id: "day", label: "Hari" },
+  { id: "week", label: "Minggu" },
+  { id: "month", label: "Bulan" },
+];
+
+const PERIOD_COPY: Record<UsagePeriod, string> = {
+  day: "Hari ini",
+  week: "7 hari terakhir",
+  month: "30 hari terakhir",
+};
 
 interface UsageDetailViewProps {
   title: string;
@@ -27,6 +41,10 @@ interface UsageDetailViewProps {
   forecast: string;
   tips: string[];
   extra?: React.ReactNode;
+  period?: UsagePeriod;
+  onPeriodChange?: (period: UsagePeriod) => void;
+  peak?: number;
+  average?: number;
 }
 
 export function UsageDetailView({
@@ -44,18 +62,31 @@ export function UsageDetailView({
   forecast,
   tips,
   extra,
+  period = "day",
+  onPeriodChange,
+  peak,
+  average,
 }: UsageDetailViewProps) {
   const down = comparisonDirection === "down";
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto animate-fade-in">
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Beranda
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Beranda
+        </Link>
+        {onPeriodChange && (
+          <SegmentedControl
+            options={PERIOD_OPTIONS}
+            value={period}
+            onChange={(id) => onPeriodChange(id as UsagePeriod)}
+          />
+        )}
+      </div>
 
       {extra}
 
@@ -76,7 +107,7 @@ export function UsageDetailView({
           </div>
           <div>
             <h1 className="text-xl font-bold">{title}</h1>
-            <p className="text-sm text-muted">Ringkasan 7 hari terakhir</p>
+            <p className="text-sm text-muted">{PERIOD_COPY[period]}</p>
           </div>
         </div>
         <div className="mt-4 flex items-end gap-3">
@@ -99,16 +130,35 @@ export function UsageDetailView({
           </div>
         </div>
         <p className="text-sm text-muted">
-          Estimasi biaya hari ini:{" "}
+          Estimasi biaya:{" "}
           <span className="font-semibold text-foreground">
             {formatCurrency(cost)}
           </span>
         </p>
       </div>
 
+      {(peak !== undefined || average !== undefined) && (
+        <div className="grid grid-cols-2 gap-3">
+          <Card>
+            <p className="text-xs text-muted">Puncak</p>
+            <p className="text-lg font-semibold">
+              {formatNumber(peak ?? 0, 1)}
+              <span className="ml-1 text-xs font-medium text-muted">{unit === "kWh" ? "W" : "L/m"}</span>
+            </p>
+          </Card>
+          <Card>
+            <p className="text-xs text-muted">Rata-rata</p>
+            <p className="text-lg font-semibold">
+              {formatNumber(average ?? 0, 1)}
+              <span className="ml-1 text-xs font-medium text-muted">{unit === "kWh" ? "W" : "L/m"}</span>
+            </p>
+          </Card>
+        </div>
+      )}
+
       <Card>
-        <h2 className="mb-3 text-base font-semibold">Tren 7 Hari</h2>
-        <BarChart data={history} unit={unit} colorClass={accentText} />
+        <h2 className="mb-3 text-base font-semibold">Tren</h2>
+        <Bar data={history} unit={unit} />
       </Card>
 
       <Card>

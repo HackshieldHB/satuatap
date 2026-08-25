@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { homeService } from "@/services/home.service";
 import { adService } from "@/services/ad.service";
 import { useAuth } from "@/hooks/useAuth";
+import { useHomeEvents } from "@/hooks/useHomeEvents";
 import { getGreeting } from "@/lib/utils";
 import { MOCK_HOMES } from "@/data/mock";
 import { QUICK_ACTIONS } from "@/data/mock";
@@ -32,9 +33,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const loadData = async () => {
-    setLoading(true);
-    setError(false);
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(false);
+    }
     try {
       const [dashResult, heroResult, midResult, recResult] = await Promise.all([
         homeService.getDashboard(homeId),
@@ -44,23 +47,25 @@ export default function DashboardPage() {
       ]);
 
       if (dashResult.success && dashResult.data) setDashboard(dashResult.data);
-      else setError(true);
+      else if (!silent) setError(true);
 
       if (heroResult.success && heroResult.data) setHeroAds(heroResult.data);
       if (midResult.success && midResult.data) setMiddleAds(midResult.data);
       if (recResult.success && recResult.data) setRecAds(recResult.data);
     } catch {
-      setError(true);
+      if (!silent) setError(true);
     }
-    setLoading(false);
-  };
+    if (!silent) setLoading(false);
+  }, [homeId]);
 
   useEffect(() => {
-    loadData();
-    const t = setInterval(loadData, 15000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeId]);
+    void loadData();
+  }, [loadData]);
+
+  useHomeEvents(homeId, {
+    onEvent: () => void loadData(true),
+    onPoll: () => void loadData(true),
+  });
 
   if (loading) return <DashboardSkeleton />;
   if (error || !dashboard)

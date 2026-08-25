@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Cpu } from "lucide-react";
 import { deviceService } from "@/services/home.service";
 import { useAuth } from "@/hooks/useAuth";
+import { useHomeEvents } from "@/hooks/useHomeEvents";
 import { DeviceCard } from "@/components/devices/DeviceCard";
 import { DeviceListSkeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -13,8 +14,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SegmentedControl } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { Search } from "@/components/ui/Search";
+import { Badge, StatusBadge } from "@/components/ui/Badge";
 import type { Device } from "@/types";
-import { Cpu } from "lucide-react";
 
 function DevicesContent() {
   const { session } = useAuth();
@@ -28,11 +29,10 @@ function DevicesContent() {
 
   const homeId = session?.selectedHomeId || "home-1";
 
-  const loadDevices = async () => {
-    setLoading(true);
+  const loadDevices = useCallback(async () => {
     setError(false);
     const [deviceResult, filterList] = await Promise.all([
-      deviceService.getDevices(homeId, filter),
+      deviceService.getDevices(homeId, filter, 1, 100),
       deviceService.getFilters(),
     ]);
     if (deviceResult.success && deviceResult.data) {
@@ -42,32 +42,60 @@ function DevicesContent() {
     }
     setFilters(filterList);
     setLoading(false);
-  };
+  }, [homeId, filter]);
 
-  // Sync the active filter when arriving via a ?filter= link (dashboard
-  // "Energi"/"Air"/"Lampu" shortcuts, the sidebar menu, or AI insight CTAs).
   useEffect(() => {
     setFilter(searchParams.get("filter") || "all");
   }, [searchParams]);
 
   useEffect(() => {
-    loadDevices();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeId, filter]);
+    setLoading(true);
+    void loadDevices();
+  }, [loadDevices]);
+
+  useHomeEvents(homeId, {
+    onEvent: (evt) => {
+      if (!evt.deviceId) {
+        void loadDevices();
+        return;
+      }
+      setDevices((list) =>
+        list.map((d) => {
+          if (d.id !== evt.deviceId) return d;
+          const status =
+            typeof evt.data.status === "string" ? (evt.data.status as Device["status"]) : d.status;
+          return { ...d, status, lastUpdated: evt.ts, lastSeen: evt.ts };
+        })
+      );
+    },
+    onPoll: () => void loadDevices(),
+  });
 
   const filtered = devices.filter(
     (d) =>
       !search ||
       d.name.toLowerCase().includes(search.toLowerCase()) ||
-      d.room.toLowerCase().includes(search.toLowerCase())
+      d.room.toLowerCase().includes(search.toLowerCase()) ||
+      (d.nodeId ?? "").toLowerCase().includes(search.toLowerCase())
   );
+
+  const groups = useMemo(() => {
+    const map = new Map<string, Device[]>();
+    for (const d of filtered) {
+      const key = d.nodeId || "tanpa-node";
+      const list = map.get(key) ?? [];
+      list.push(d);
+      map.set(key, list);
+    }
+    return [...map.entries()];
+  }, [filtered]);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold">Perangkat Saya</h1>
-          <p className="text-sm text-muted">{devices.length} perangkat</p>
+          <p className="text-sm text-muted">{devices.length} perangkat · dikelompokkan per node</p>
         </div>
         <Link href="/devices/add">
           <Button size="sm" className="gap-1.5">
@@ -78,7 +106,7 @@ function DevicesContent() {
       </div>
 
       <Search
-        placeholder="Cari perangkat..."
+        placeholder="Cari perangkat atau node..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -104,11 +132,27 @@ function DevicesContent() {
           onAction={() => (window.location.href = "/devices/add")}
         />
       )}
-      {!loading && !error && filtered.length > 0 && (
-        <div className="space-y-3">
-          {filtered.map((device) => (
-            <DeviceCard key={device.id} device={device} showControl />
-          ))}
+      {!loading && !error && groups.length > 0 && (
+        <div className="space-y-6">
+          {groups.map(([nodeId, list]) => {
+            const online = list.some((d) => d.status === "online");
+            return (
+              <section key={nodeId} className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold">{nodeId}</p>
+                    <p className="text-xs text-muted">
+                      {list.filter((d) => d.status === "online").length}/{list.length} online
+                    </p>
+                  </div>
+                  {online ? <StatusBadge status="online" /> : <Badge variant="error">Node offline</Badge>}
+                </div>
+                {list.map((device) => (
+                  <DeviceCard key={device.id} device={device} showControl />
+                ))}
+              </section>
+            );
+          })}
         </div>
       )}
     </div>

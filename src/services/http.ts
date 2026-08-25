@@ -50,11 +50,15 @@ export async function apiFetch<T>(
   try {
     const res = await fetchTimeout(`${apiBaseUrl}${path}`, { ...init, headers }, CLOUD_TIMEOUT_MS);
     const json = (await res.json()) as ApiResponse<T> & { error?: string };
-    if (!res.ok) {
-      throw new Error(json.error ?? `HTTP ${res.status}`);
+    if (res.ok) {
+      setLocalMode(false);
+      return json;
     }
-    setLocalMode(false);
-    return json;
+    if (res.status < 500) {
+      setLocalMode(false);
+      return { success: false, error: json.error ?? `HTTP ${res.status}` };
+    }
+    throw new Error(json.error ?? `HTTP ${res.status}`);
   } catch {
     try {
       const res = await fetchTimeout(`${edgeBaseUrl}${edgePath(path)}`, { ...init, headers }, CLOUD_TIMEOUT_MS);

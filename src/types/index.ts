@@ -128,7 +128,14 @@ export interface Device {
   capabilities?: string[];
   lastSeen?: string;
   firmware?: { model?: string; version?: string };
+  nodeId?: string;
+  macAddress?: string;
+  ipAddress?: string;
+  buildNumber?: number;
+  config?: Record<string, unknown>;
 }
+
+export type UsagePeriod = "day" | "week" | "month";
 
 export interface EnergyUsage {
   homeId: string;
@@ -136,6 +143,10 @@ export interface EnergyUsage {
   estimatedCost: number;
   comparisonPercent: number;
   comparisonDirection: "up" | "down";
+  period?: UsagePeriod;
+  consumption?: number;
+  peak?: number;
+  average?: number;
 }
 
 export interface WaterUsage {
@@ -144,6 +155,10 @@ export interface WaterUsage {
   estimatedCost: number;
   comparisonPercent: number;
   comparisonDirection: "up" | "down";
+  period?: UsagePeriod;
+  consumption?: number;
+  peak?: number;
+  average?: number;
 }
 
 export interface EnvironmentData {
@@ -151,6 +166,95 @@ export interface EnvironmentData {
   temperature: number;
   humidity: number;
   airQuality?: "good" | "moderate" | "poor";
+}
+
+export interface TelemetryPoint {
+  deviceId: string;
+  homeId: string;
+  timestamp: string;
+  metrics: Record<string, unknown>;
+}
+
+export type AlertSeverity = "info" | "warning" | "critical";
+export type AlertStatus = "open" | "acknowledged" | "resolved";
+export type AlertType =
+  | "HIGH_ELECTRICITY"
+  | "ABNORMAL_WATER"
+  | "POSSIBLE_LEAK"
+  | "DEVICE_OFFLINE"
+  | "SENSOR_ERROR";
+
+export interface HomeAlert {
+  id: string;
+  homeId: string;
+  deviceId?: string | null;
+  roomId?: string | null;
+  severity: AlertSeverity;
+  type: AlertType;
+  title: string;
+  message: string;
+  status: AlertStatus;
+  createdAt: string;
+  acknowledgedAt?: string | null;
+  deviceName?: string;
+  roomName?: string;
+}
+
+export interface AlertThreshold {
+  id: string;
+  homeId: string;
+  type: AlertType;
+  metric: string;
+  op: string;
+  value: number;
+  forSeconds: number;
+  severity: AlertSeverity;
+  enabled: boolean;
+}
+
+export interface EnvironmentRoom {
+  deviceId: string;
+  room: string;
+  temperature: number;
+  humidity: number;
+  min: number;
+  max: number;
+  avg: number;
+  history: { label: string; value: number }[];
+}
+
+export interface MotionStrip {
+  deviceId: string;
+  room: string;
+  lastDetected?: string | null;
+  hours: boolean[];
+}
+
+export interface EnvironmentDetail {
+  homeId: string;
+  rooms: EnvironmentRoom[];
+  motion: MotionStrip[];
+}
+
+export type SystemComponentStatus = "up" | "down" | "degraded" | "unknown";
+
+export interface SystemNodeStatus {
+  nodeId: string;
+  status: SystemComponentStatus;
+  lastSeen?: string;
+  deviceCount: number;
+  onlineCount: number;
+}
+
+export interface SystemHealth {
+  pi: SystemComponentStatus;
+  mqtt: SystemComponentStatus;
+  database: SystemComponentStatus;
+  cloud: SystemComponentStatus;
+  nodes: SystemNodeStatus[];
+  backlog: number;
+  lastSync: string | null;
+  localMode: boolean;
 }
 
 export type AIInsightCategory =
