@@ -28,6 +28,7 @@ import { createCommand } from "./automation.js";
 import { hub, type AppEvent } from "./events.js";
 import { mapHome, mapRoom, mapDeviceForUi } from "./mappers.js";
 import { config } from "./config.js";
+import { periodWindow } from "./rollup.js";
 
 function startOfUtcDay(d = new Date()): Date {
   const x = new Date(d);
@@ -450,24 +451,41 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!(await requireHomeRole(req.user.sub, homeId))) {
       return reply.code(403).send({ success: false, error: "Forbidden" });
     }
+    const period = ((req.query as { period?: string }).period ?? "day") as "day" | "week" | "month";
+    const now = new Date();
+    const window = periodWindow(period === "week" || period === "month" ? period : "day", now);
     const tariff = await prisma.utilityConfig.findUnique({ where: { homeId } });
     const rate = Number(tariff?.electricityTariffPerKwh ?? 0);
     const todayStart = startOfUtcDay();
     const yesterdayStart = new Date(todayStart);
     yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
+    const consumption = await sumDeltaMetric(homeId, "energy_kwh_delta", window.start, window.end);
     const todayKwh = await sumDeltaMetric(homeId, "energy_kwh_delta", todayStart, new Date());
     const yesterdayKwh = await sumDeltaMetric(homeId, "energy_kwh_delta", yesterdayStart, todayStart);
-    const { peak, average } = await powerStats(homeId, todayStart, new Date());
+    const { peak, average } = await powerStats(homeId, window.start, window.end);
     const comparisonPercent =
       yesterdayKwh > 0 ? Math.round((Math.abs(todayKwh - yesterdayKwh) / yesterdayKwh) * 100) : 0;
     const history = [];
-    for (const d of dayLabels()) {
-      const end = new Date(d.start);
-      end.setUTCDate(end.getUTCDate() + 1);
-      history.push({
-        label: d.label,
-        value: Number((await sumDeltaMetric(homeId, "energy_kwh_delta", d.start, end)).toFixed(2)),
-      });
+    if (period === "week" || period === "month") {
+      const cursor = new Date(window.start);
+      while (cursor < window.end && cursor < now) {
+        const end = new Date(cursor);
+        end.setUTCDate(end.getUTCDate() + 1);
+        history.push({
+          label: cursor.toISOString().slice(5, 10),
+          value: Number((await sumDeltaMetric(homeId, "energy_kwh_delta", cursor, end)).toFixed(2)),
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    } else {
+      for (const d of dayLabels()) {
+        const end = new Date(d.start);
+        end.setUTCDate(end.getUTCDate() + 1);
+        history.push({
+          label: d.label,
+          value: Number((await sumDeltaMetric(homeId, "energy_kwh_delta", d.start, end)).toFixed(2)),
+        });
+      }
     }
     const latest = await prisma.telemetryReading.findFirst({
       where: { homeId, device: { type: "energy_meter" } },
@@ -478,11 +496,14 @@ export async function registerRoutes(app: FastifyInstance) {
       success: true,
       data: {
         homeId,
+        period,
         todayKwh: Number(todayKwh.toFixed(2)),
-        estimatedCost: Math.round(todayKwh * rate),
+        consumption: Number(consumption.toFixed(2)),
+        estimatedCost: Math.round(consumption * rate),
         comparisonPercent,
         comparisonDirection: todayKwh >= yesterdayKwh ? "up" : "down",
         history,
+        series: history,
         current: {
           voltage: metrics.voltage,
           current: metrics.current,
@@ -504,41 +525,70 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!(await requireHomeRole(req.user.sub, homeId))) {
       return reply.code(403).send({ success: false, error: "Forbidden" });
     }
+    const period = ((req.query as { period?: string }).period ?? "day") as "day" | "week" | "month";
+    const now = new Date();
+    const window = periodWindow(period === "week" || period === "month" ? period : "day", now);
     const tariff = await prisma.utilityConfig.findUnique({ where: { homeId } });
     const rateM3 = Number(tariff?.waterTariffPerM3 ?? 0);
     const todayStart = startOfUtcDay();
     const yesterdayStart = new Date(todayStart);
     yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
+    const consumption = await sumDeltaMetric(homeId, "volume_liters_delta", window.start, window.end);
     const todayLiters = await sumDeltaMetric(homeId, "volume_liters_delta", todayStart, new Date());
     const yesterday = await sumDeltaMetric(homeId, "volume_liters_delta", yesterdayStart, todayStart);
     const comparisonPercent =
       yesterday > 0 ? Math.round((Math.abs(todayLiters - yesterday) / yesterday) * 100) : 0;
     const history = [];
-    for (const d of dayLabels()) {
-      const end = new Date(d.start);
-      end.setUTCDate(end.getUTCDate() + 1);
-      history.push({
-        label: d.label,
-        value: Math.round(await sumDeltaMetric(homeId, "volume_liters_delta", d.start, end)),
-      });
+    if (period === "week" || period === "month") {
+      const cursor = new Date(window.start);
+      while (cursor < window.end && cursor < now) {
+        const end = new Date(cursor);
+        end.setUTCDate(end.getUTCDate() + 1);
+        history.push({
+          label: cursor.toISOString().slice(5, 10),
+          value: Math.round(await sumDeltaMetric(homeId, "volume_liters_delta", cursor, end)),
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    } else {
+      for (const d of dayLabels()) {
+        const end = new Date(d.start);
+        end.setUTCDate(end.getUTCDate() + 1);
+        history.push({
+          label: d.label,
+          value: Math.round(await sumDeltaMetric(homeId, "volume_liters_delta", d.start, end)),
+        });
+      }
     }
     const latest = await prisma.telemetryReading.findFirst({
       where: { homeId, device: { type: "water_meter" } },
       orderBy: { recordedAt: "desc" },
     });
     const metrics = (latest?.metrics as Record<string, number> | undefined) ?? {};
+    const flowRows = await prisma.telemetryAggregate.findMany({
+      where: { homeId, metric: "flow_lpm", period: "hour", periodStart: { gte: window.start, lt: window.end } },
+    });
+    const peak = flowRows.length ? Math.max(...flowRows.map((r) => r.max)) : Number(metrics.flow_lpm ?? 0);
+    const average = flowRows.length
+      ? flowRows.reduce((a, r) => a + r.avg * r.sampleCount, 0) / Math.max(1, flowRows.reduce((a, r) => a + r.sampleCount, 0))
+      : Number(metrics.flow_lpm ?? 0);
     return {
       success: true,
       data: {
         homeId,
+        period,
         todayLiters: Math.round(todayLiters),
-        estimatedCost: Math.round((todayLiters / 1000) * rateM3),
+        consumption: Math.round(consumption),
+        estimatedCost: Math.round((consumption / 1000) * rateM3),
         comparisonPercent,
         comparisonDirection: todayLiters >= yesterday ? "up" : "down",
         history,
+        series: history,
         current: { flow_lpm: metrics.flow_lpm, volume_liters: metrics.volume_liters },
         tariffPerM3: rateM3,
         currency: tariff?.currency ?? "IDR",
+        peak,
+        average,
       },
     };
   });
@@ -784,6 +834,103 @@ export async function registerRoutes(app: FastifyInstance) {
       take: 50,
     });
     return { success: true, data: rows };
+  });
+
+  app.post("/v1/homes/:homeId/alerts/:alertId/ack", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId, alertId } = req.params as { homeId: string; alertId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const alert = await prisma.alert.findFirst({ where: { id: alertId, homeId } });
+    if (!alert) return reply.code(404).send({ success: false, error: "Alert not found" });
+    const updated = await prisma.alert.update({
+      where: { id: alertId },
+      data: { status: "acknowledged", acknowledgedById: req.user.sub, acknowledgedAt: new Date() },
+    });
+    await audit(req.user.sub, "alert.acknowledged", "Alert", alertId, { homeId });
+    return { success: true, data: updated };
+  });
+
+  app.get("/v1/homes/:homeId/alert-thresholds", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "ADMIN"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const rows = await prisma.alertThreshold.findMany({ where: { homeId } });
+    return { success: true, data: rows };
+  });
+
+  app.post("/v1/homes/:homeId/alert-thresholds", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "ADMIN"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const body = req.body as {
+      type: "HIGH_ELECTRICITY" | "ABNORMAL_WATER" | "POSSIBLE_LEAK" | "DEVICE_OFFLINE" | "SENSOR_ERROR";
+      metric: string;
+      op: string;
+      value: number;
+      forSeconds?: number;
+      severity: "info" | "warning" | "critical";
+      enabled?: boolean;
+    };
+    if (!body?.type || !body.metric || !body.op || typeof body.value !== "number") {
+      return reply.code(400).send({ success: false, error: "Invalid payload" });
+    }
+    const row = await prisma.alertThreshold.create({
+      data: {
+        homeId,
+        type: body.type,
+        metric: body.metric,
+        op: body.op,
+        value: body.value,
+        forSeconds: body.forSeconds ?? 0,
+        severity: body.severity,
+        enabled: body.enabled ?? true,
+      },
+    });
+    await audit(req.user.sub, "alert_threshold.created", "AlertThreshold", row.id, { homeId });
+    return { success: true, data: row };
+  });
+
+  app.patch("/v1/homes/:homeId/alert-thresholds/:id", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId, id } = req.params as { homeId: string; id: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "ADMIN"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const existing = await prisma.alertThreshold.findFirst({ where: { id, homeId } });
+    if (!existing) return reply.code(404).send({ success: false, error: "Not found" });
+    const body = req.body as Partial<{
+      op: string;
+      value: number;
+      forSeconds: number;
+      severity: "info" | "warning" | "critical";
+      enabled: boolean;
+      metric: string;
+    }>;
+    const row = await prisma.alertThreshold.update({
+      where: { id },
+      data: {
+        op: body.op ?? existing.op,
+        value: body.value ?? existing.value,
+        forSeconds: body.forSeconds ?? existing.forSeconds,
+        severity: body.severity ?? existing.severity,
+        enabled: body.enabled ?? existing.enabled,
+        metric: body.metric ?? existing.metric,
+      },
+    });
+    await audit(req.user.sub, "alert_threshold.updated", "AlertThreshold", id, { homeId });
+    return { success: true, data: row };
+  });
+
+  app.delete("/v1/homes/:homeId/alert-thresholds/:id", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId, id } = req.params as { homeId: string; id: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "ADMIN"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    await prisma.alertThreshold.deleteMany({ where: { id, homeId } });
+    await audit(req.user.sub, "alert_threshold.deleted", "AlertThreshold", id, { homeId });
+    return { success: true, data: { deleted: true } };
   });
 
   app.get("/v1/homes/:homeId/events", { preHandler: authenticate }, async (req, reply) => {
@@ -1065,6 +1212,7 @@ export async function registerRoutes(app: FastifyInstance) {
     requireInternalKey(req, reply);
     if (reply.sent) return;
     const items = (req.body as { items?: Array<{
+      id?: string;
       homeId: string;
       deviceId?: string;
       roomId?: string;
@@ -1072,11 +1220,51 @@ export async function registerRoutes(app: FastifyInstance) {
       type: "HIGH_ELECTRICITY" | "ABNORMAL_WATER" | "POSSIBLE_LEAK" | "DEVICE_OFFLINE" | "SENSOR_ERROR";
       title: string;
       message: string;
+      status?: "open" | "acknowledged" | "resolved";
     }> }).items ?? [];
     for (const item of items) {
-      await prisma.alert.create({ data: item });
+      if (item.id) {
+        await prisma.alert.upsert({
+          where: { id: item.id },
+          create: {
+            id: item.id,
+            homeId: item.homeId,
+            deviceId: item.deviceId,
+            roomId: item.roomId,
+            severity: item.severity,
+            type: item.type,
+            title: item.title,
+            message: item.message,
+            status: item.status ?? "open",
+          },
+          update: {
+            status: item.status ?? "open",
+            message: item.message,
+          },
+        });
+      } else {
+        await prisma.alert.create({
+          data: {
+            homeId: item.homeId,
+            deviceId: item.deviceId,
+            roomId: item.roomId,
+            severity: item.severity,
+            type: item.type,
+            title: item.title,
+            message: item.message,
+            status: item.status ?? "open",
+          },
+        });
+      }
     }
     return { success: true };
+  });
+
+  app.get("/internal/alert-thresholds", async (req, reply) => {
+    requireInternalKey(req, reply);
+    if (reply.sent) return;
+    const rows = await prisma.alertThreshold.findMany({ where: { enabled: true } });
+    return { success: true, data: rows };
   });
 
   app.post("/internal/automation-executions", async (req, reply) => {

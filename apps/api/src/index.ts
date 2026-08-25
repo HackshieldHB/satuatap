@@ -1,4 +1,4 @@
-import { buildApp } from "./app.js";
+import { buildApp, startScheduledJobs } from "./app.js";
 import { config } from "./config.js";
 import { prisma } from "@satu-atap/db";
 
@@ -19,4 +19,5 @@ setInterval(() => {
 }, 15_000);
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
+startScheduledJobs();
 app.log.info({ msg: "API listening", port: config.port });

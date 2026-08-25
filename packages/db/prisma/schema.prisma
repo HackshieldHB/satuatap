@@ -160,6 +160,7 @@ model Home {
   alerts           Alert[]
   motionEvents     MotionEvent[]
   utilityConfig    UtilityConfig?
+  alertThresholds  AlertThreshold[]
 }
 
 model Membership {
@@ -405,6 +406,21 @@ model UtilityConfig {
   electricityTariffPerKwh   Decimal @db.Decimal(12, 4)
   waterTariffPerM3          Decimal @db.Decimal(12, 4)
   currency                  String  @default("IDR")
+}
+
+model AlertThreshold {
+  id         String        @id @default(cuid())
+  homeId     String
+  home       Home          @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  type       AlertType
+  metric     String
+  op         String
+  value      Float
+  forSeconds Int           @default(0)
+  severity   AlertSeverity
+  enabled    Boolean       @default(true)
+
+  @@unique([homeId, type, metric])
 }
 
 model AuditLog {

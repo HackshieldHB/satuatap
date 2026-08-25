@@ -28,7 +28,8 @@ import {
 import { openEdgeDb } from "./db.js";
 import { ingestMqttMessage, type MqttPublisher } from "./ingest.js";
 import { schedulerTick } from "./edge-automation.js";
-import { drainOutbox, probeCloud, syncRules } from "./sync.js";
+import { evaluateOfflineThresholds } from "./edge-thresholds.js";
+import { drainOutbox, probeCloud, syncRules, syncThresholds } from "./sync.js";
 import { registerLocalApi } from "./local-api.js";
 
 export async function startGateway(opts?: { dbPath?: string; listen?: boolean }) {
@@ -194,6 +195,7 @@ export async function startGateway(opts?: { dbPath?: string; listen?: boolean })
     await drainOutbox(db, { apiUrl: API_URL, internalKey: INTERNAL_API_KEY });
     if (cloudReady) {
       await syncRules(db, { apiUrl: API_URL, internalKey: INTERNAL_API_KEY });
+      await syncThresholds(db, { apiUrl: API_URL, internalKey: INTERNAL_API_KEY });
     }
   };
 
@@ -208,12 +210,17 @@ export async function startGateway(opts?: { dbPath?: string; listen?: boolean })
 
   setInterval(() => {
     syncRules(db, { apiUrl: API_URL, internalKey: INTERNAL_API_KEY }).catch(() => undefined);
+    syncThresholds(db, { apiUrl: API_URL, internalKey: INTERNAL_API_KEY }).catch(() => undefined);
   }, 30_000);
 
   const align = 60_000 - (Date.now() % 60_000);
   setTimeout(() => {
     schedulerTick(db, HOME_ID, publish);
-    setInterval(() => schedulerTick(db, HOME_ID, publish), 60_000);
+    evaluateOfflineThresholds(db, HOME_ID);
+    setInterval(() => {
+      schedulerTick(db, HOME_ID, publish);
+      evaluateOfflineThresholds(db, HOME_ID);
+    }, 60_000);
   }, align);
 
   void syncOnce();

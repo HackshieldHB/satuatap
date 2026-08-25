@@ -35,6 +35,28 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS threshold_cache (
+  threshold_id TEXT PRIMARY KEY,
+  home_id TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS threshold_state (
+  key TEXT PRIMARY KEY,
+  open INTEGER NOT NULL DEFAULT 0,
+  breached_since INTEGER,
+  ok_since INTEGER,
+  alert_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS daily_volume (
+  device_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  liters REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (device_id, day)
+);
 `;
 
 export type EdgeDb = Database.Database;

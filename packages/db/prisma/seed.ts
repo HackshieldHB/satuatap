@@ -368,6 +368,50 @@ async function main() {
   });
   await prisma.automationRule.deleteMany({ where: { id: "auto-motion-living" } });
 
+  const defaultThresholds = [
+    {
+      type: "HIGH_ELECTRICITY" as const,
+      metric: "power",
+      op: "gt",
+      value: 3000,
+      forSeconds: 0,
+      severity: "warning" as const,
+    },
+    {
+      type: "POSSIBLE_LEAK" as const,
+      metric: "flow_lpm",
+      op: "gt",
+      value: 15,
+      forSeconds: 600,
+      severity: "critical" as const,
+    },
+    {
+      type: "DEVICE_OFFLINE" as const,
+      metric: "last_seen_age_s",
+      op: "gt",
+      value: 300,
+      forSeconds: 0,
+      severity: "warning" as const,
+    },
+    {
+      type: "ABNORMAL_WATER" as const,
+      metric: "volume_liters",
+      op: "gt",
+      value: 2,
+      forSeconds: 0,
+      severity: "warning" as const,
+    },
+  ];
+  for (const homeId of ["home-1", "home-2"] as const) {
+    for (const t of defaultThresholds) {
+      await prisma.alertThreshold.upsert({
+        where: { homeId_type_metric: { homeId, type: t.type, metric: t.metric } },
+        update: { op: t.op, value: t.value, forSeconds: t.forSeconds, severity: t.severity, enabled: true },
+        create: { homeId, ...t, enabled: true },
+      });
+    }
+  }
+
   await mkdir(MQTT_GENERATED_DIR, { recursive: true });
   await writeFile(
     path.join(MQTT_GENERATED_DIR, "dev-passwords.json"),

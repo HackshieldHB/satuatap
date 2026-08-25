@@ -11,6 +11,7 @@ import {
   type OutboxKind,
   type OutboxRow,
 } from "./store.js";
+import { upsertThresholdCache } from "./edge-thresholds.js";
 
 export type CloudFetch = typeof fetch;
 
@@ -182,6 +183,45 @@ export async function syncRules(
     return true;
   } catch (err) {
     log("warn", "Rule sync unreachable", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    return false;
+  }
+}
+
+export async function syncThresholds(
+  db: EdgeDb,
+  opts: { apiUrl: string; internalKey: string; fetchFn?: CloudFetch }
+): Promise<boolean> {
+  const fetchFn = opts.fetchFn ?? fetch;
+  try {
+    const res = await fetchFn(`${opts.apiUrl}/internal/alert-thresholds`, {
+      headers: { "x-internal-key": opts.internalKey },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      log("warn", "Threshold sync failed", { status: res.status });
+      return false;
+    }
+    const body = (await res.json()) as {
+      data: Array<{
+        id: string;
+        homeId: string;
+        type: string;
+        metric: string;
+        op: string;
+        value: number;
+        forSeconds: number;
+        severity: string;
+        enabled: boolean;
+      }>;
+    };
+    for (const row of body.data ?? []) {
+      upsertThresholdCache(db, row.id, row.homeId, row, Date.now());
+    }
+    return true;
+  } catch (err) {
+    log("warn", "Threshold sync unreachable", {
       error: err instanceof Error ? err.message : "unknown",
     });
     return false;

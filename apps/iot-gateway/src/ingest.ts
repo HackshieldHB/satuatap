@@ -15,6 +15,7 @@ import {
   type OutboxKind,
 } from "./store.js";
 import { evaluateEdgeRules } from "./edge-automation.js";
+import { evaluateDeviceThresholds } from "./edge-thresholds.js";
 
 export type MqttPublisher = (
   topic: string,
@@ -85,6 +86,7 @@ export function ingestMqttMessage(
         { homeId, deviceId, source: channel, payload: ok.data },
         now
       );
+      evaluateDeviceThresholds(db, homeId, deviceId, ok.data.metrics as Record<string, unknown>, now);
       upsertDeviceState(db, deviceId, homeId, ok.data.metrics as Record<string, unknown>, now);
     })();
     const metrics = ok.data.metrics as Record<string, unknown>;

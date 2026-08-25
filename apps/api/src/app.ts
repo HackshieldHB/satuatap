@@ -6,6 +6,7 @@ import rateLimit from "@fastify/rate-limit";
 import { prisma } from "@satu-atap/db";
 import { config } from "./config.js";
 import { registerRoutes } from "./routes.js";
+import { rollupNow } from "./rollup.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -73,4 +74,14 @@ export async function buildApp() {
   });
 
   return app;
+}
+
+export function startScheduledJobs() {
+  const tick = () => {
+    rollupNow().catch((err) => {
+      console.error(JSON.stringify({ msg: "Rollup failed", error: String(err) }));
+    });
+  };
+  tick();
+  return setInterval(tick, 60 * 60 * 1000);
 }
