@@ -80,7 +80,14 @@ export async function ingestTelemetry(input: {
   });
   if (!device) return { ok: false as const, error: "unknown_device" };
 
-  const metrics = await enrichCounterDeltas(input.deviceId, input.metrics);
+    const existing = await prisma.telemetryReading.findUnique({
+      where: {
+        deviceId_recordedAt: { deviceId: input.deviceId, recordedAt: input.recordedAt },
+      },
+    });
+    if (existing) return { ok: true as const, id: existing.id, duplicate: true };
+
+    const metrics = await enrichCounterDeltas(input.deviceId, input.metrics);
 
   const reading = await prisma.telemetryReading.create({
     data: {

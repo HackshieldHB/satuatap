@@ -302,6 +302,7 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  degraded?: boolean;
 }
 
 export interface PaginatedResponse<T> {

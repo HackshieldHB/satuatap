@@ -66,7 +66,12 @@ services:
       MQTT_PASSWORD: ${MQTT_PASSWORD:-local-dev-mqtt-gateway}
       API_URL: http://api:3001
       INTERNAL_API_KEY: local-internal-key
+      EDGE_DB_PATH: /data/edge.sqlite
+      EDGE_LOCAL_TOKEN: local-edge-token
+      HOME_ID: home-1
       OFFLINE_AFTER_MS: "45000"
+    volumes:
+      - edge_db:/data
 
   iot-simulator:
     build:
@@ -90,3 +95,4 @@ services:
 
 volumes:
   satuatap_pg:
+  edge_db:

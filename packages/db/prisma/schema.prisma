@@ -256,8 +256,8 @@ model TelemetryReading {
   metrics    Json
   createdAt  DateTime @default(now())
 
+  @@unique([deviceId, recordedAt])
   @@index([homeId, recordedAt])
-  @@index([deviceId, recordedAt])
 }
 
 model DeviceCounterSnapshot {

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
-import { prisma } from "@satu-atap/db";
+import { prisma, type Prisma } from "@satu-atap/db";
 import {
   DEFAULT_CAPABILITIES,
   createAutomationBodySchema,
@@ -950,6 +950,146 @@ export async function registerRoutes(app: FastifyInstance) {
       data: { status: "SENT", sentAt: new Date() },
     });
     req.log.info({ msg: "Command sent", commandId: id });
+    return { success: true };
+  });
+
+  app.get("/internal/automations", async (req, reply) => {
+    requireInternalKey(req, reply);
+    if (reply.sent) return;
+    const since = (req.query as { since?: string }).since;
+    const where = since ? { updatedAt: { gt: new Date(since) } } : {};
+    const rules = await prisma.automationRule.findMany({
+      where,
+      orderBy: { updatedAt: "asc" },
+    });
+    const cursor =
+      rules.length > 0
+        ? rules[rules.length - 1].updatedAt.toISOString()
+        : (since ?? new Date().toISOString());
+    return { success: true, data: rules, cursor };
+  });
+
+  app.post("/internal/telemetry/batch", async (req, reply) => {
+    requireInternalKey(req, reply);
+    if (reply.sent) return;
+    const items = (req.body as { items?: Array<{
+      homeId: string;
+      deviceId: string;
+      source?: "telemetry" | "state";
+      payload: unknown;
+    }> }).items ?? [];
+    let accepted = 0;
+    for (const item of items.slice(0, 500)) {
+      const parsed = telemetryPayloadSchema.safeParse(item.payload);
+      if (!parsed.success) continue;
+      const result = await ingestTelemetry({
+        homeId: item.homeId,
+        deviceId: item.deviceId,
+        recordedAt: new Date(parsed.data.ts),
+        metrics: parsed.data.metrics,
+        source: item.source === "state" ? "state" : "telemetry",
+      });
+      if (result.ok) accepted += 1;
+    }
+    return { success: true, data: { accepted } };
+  });
+
+  app.post("/internal/events/batch", async (req, reply) => {
+    requireInternalKey(req, reply);
+    if (reply.sent) return;
+    const items = (req.body as { items?: Array<{
+      homeId: string;
+      deviceId: string;
+      payload: unknown;
+    }> }).items ?? [];
+    let accepted = 0;
+    for (const item of items.slice(0, 500)) {
+      const parsed = eventPayloadSchema.safeParse(item.payload);
+      if (!parsed.success) continue;
+      const result = await ingestDeviceEvent({
+        homeId: item.homeId,
+        deviceId: item.deviceId,
+        ts: new Date(parsed.data.ts),
+        event: parsed.data.event,
+        data: parsed.data.data,
+      });
+      if (result.ok) accepted += 1;
+    }
+    return { success: true, data: { accepted } };
+  });
+
+  app.post("/internal/commands/reconcile", async (req, reply) => {
+    requireInternalKey(req, reply);
+    if (reply.sent) return;
+    const items = (req.body as { items?: Array<{
+      id: string;
+      homeId: string;
+      deviceId: string;
+      type: string;
+      params?: Record<string, unknown>;
+      idempotencyKey: string;
+      status?: string;
+    }> }).items ?? [];
+    let accepted = 0;
+    for (const item of items.slice(0, 500)) {
+      const existing = await prisma.command.findUnique({ where: { id: item.id } });
+      if (existing) {
+        accepted += 1;
+        continue;
+      }
+      const byKey = await prisma.command.findUnique({
+        where: { homeId_idempotencyKey: { homeId: item.homeId, idempotencyKey: item.idempotencyKey } },
+      });
+      if (byKey) {
+        accepted += 1;
+        continue;
+      }
+      await prisma.command.create({
+        data: {
+          id: item.id,
+          homeId: item.homeId,
+          deviceId: item.deviceId,
+          type: item.type,
+          params: (item.params ?? {}) as Prisma.InputJsonValue,
+          idempotencyKey: item.idempotencyKey,
+          status: "SENT",
+          sentAt: new Date(),
+        },
+      });
+      accepted += 1;
+    }
+    return { success: true, data: { accepted } };
+  });
+
+  app.post("/internal/alerts", async (req, reply) => {
+    requireInternalKey(req, reply);
+    if (reply.sent) return;
+    const items = (req.body as { items?: Array<{
+      homeId: string;
+      deviceId?: string;
+      roomId?: string;
+      severity: "info" | "warning" | "critical";
+      type: "HIGH_ELECTRICITY" | "ABNORMAL_WATER" | "POSSIBLE_LEAK" | "DEVICE_OFFLINE" | "SENSOR_ERROR";
+      title: string;
+      message: string;
+    }> }).items ?? [];
+    for (const item of items) {
+      await prisma.alert.create({ data: item });
+    }
+    return { success: true };
+  });
+
+  app.post("/internal/automation-executions", async (req, reply) => {
+    requireInternalKey(req, reply);
+    if (reply.sent) return;
+    const items = (req.body as { items?: Array<{
+      ruleId: string;
+      status: string;
+      result?: object;
+    }> }).items ?? [];
+    for (const item of items) {
+      await prisma.automationExecution.create({ data: item });
+    }
     return { success: true };
   });
 }
