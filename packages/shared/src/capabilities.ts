@@ -41,7 +41,7 @@ export const DEFAULT_CAPABILITIES: Record<DeviceTypeId, Capability[]> = {
   humidity_sensor: ["humidity"],
   environment_sensor: ["temperature", "humidity"],
   motion_sensor: ["motion"],
-  light: ["on_off", "brightness"],
+  light: ["on_off"],
   switch: ["on_off"],
   smart_plug: ["on_off", "power"],
   camera: [],

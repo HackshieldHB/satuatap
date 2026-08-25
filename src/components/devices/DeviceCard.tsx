@@ -15,7 +15,6 @@ import {
   Clock,
   MapPin,
   Gauge,
-  Sun,
   Minus,
   Plus,
   type LucideIcon,
@@ -34,8 +33,10 @@ const deviceIcons: Record<string, LucideIcon> = {
   switch: ToggleLeft,
   temperature_sensor: Thermometer,
   humidity_sensor: Droplets,
+  environment_sensor: Thermometer,
   motion_sensor: Activity,
   electricity_meter: Zap,
+  energy_meter: Zap,
   water_meter: Droplets,
   smart_plug: Plug,
   camera: Camera,
@@ -47,8 +48,10 @@ const typeLabels: Record<string, string> = {
   switch: "Smart Switch",
   temperature_sensor: "Sensor Suhu",
   humidity_sensor: "Sensor Kelembapan",
+  environment_sensor: "Sensor Lingkungan",
   motion_sensor: "Sensor Gerak",
   electricity_meter: "Meter Listrik",
+  energy_meter: "Meter Listrik",
   water_meter: "Meter Air",
   smart_plug: "Smart Plug",
   camera: "Kamera",
@@ -72,10 +75,8 @@ export function DeviceCard({
   const [loading, setLoading] = useState(false);
   const [isOn, setIsOn] = useState(device.isOn);
   const [open, setOpen] = useState(false);
-  const [brightness, setBrightness] = useState(80);
   const [targetTemp, setTargetTemp] = useState(23);
 
-  const isLight = device.type === "light";
   const isClimate = /\bac\b/i.test(device.name);
 
   const handleToggle = async (e?: React.MouseEvent) => {
@@ -198,27 +199,6 @@ export function DeviceCard({
             )}
             <InfoTile icon={Clock} label="Diperbarui" value={lastUpdated} />
           </div>
-
-          {online && isLight && isOn && (
-            <div>
-              <div className="mb-1.5 flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1.5 text-muted">
-                  <Sun className="h-3.5 w-3.5" />
-                  Kecerahan
-                </span>
-                <span className="font-medium">{brightness}%</span>
-              </div>
-              <input
-                type="range"
-                min={10}
-                max={100}
-                value={brightness}
-                onChange={(e) => setBrightness(Number(e.target.value))}
-                className="w-full accent-primary"
-                aria-label="Kecerahan lampu"
-              />
-            </div>
-          )}
 
           {online && isClimate && isOn && (
             <div className="flex flex-col items-center gap-2">

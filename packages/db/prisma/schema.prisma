@@ -103,6 +103,17 @@ model Site {
   timezone       String       @default("Asia/Jakarta")
   buildings      Building[]
   homes          Home[]
+  gateways       Gateway[]
+}
+
+model Gateway {
+  id        String    @id
+  siteId    String
+  site      Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name      String
+  version   String?
+  lastSeen  DateTime?
+  createdAt DateTime  @default(now())
 }
 
 model Building {
@@ -189,6 +200,9 @@ model Device {
   firmwareVersion String?
   hardwareVersion String?
   nodeId          String?
+  macAddress      String?
+  buildNumber     Int?
+  config          Json?
   claimToken      String?
   isOn            Boolean?
   createdAt       DateTime           @default(now())

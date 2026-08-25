@@ -24,8 +24,8 @@ describe("automation engine", () => {
   it("evaluates telemetry threshold", () => {
     expect(
       triggerMatches(
-        { type: "TELEMETRY_THRESHOLD", deviceId: "dev-energy", metric: "power", op: "gt", value: 500 },
-        { type: "TELEMETRY", deviceId: "dev-energy", metrics: { power: 712 } }
+        { type: "TELEMETRY_THRESHOLD", deviceId: "energy-main", metric: "power", op: "gt", value: 500 },
+        { type: "TELEMETRY", deviceId: "energy-main", metrics: { power: 712 } }
       )
     ).toBe(true);
   });

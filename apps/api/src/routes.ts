@@ -6,6 +6,9 @@ import {
   createAutomationBodySchema,
   createCommandBodySchema,
   createDeviceBodySchema,
+  patchDeviceConfigBodySchema,
+  waterMeterConfigSchema,
+  energyMeterConfigSchema,
   loginBodySchema,
   ackPayloadSchema,
   telemetryPayloadSchema,
@@ -332,6 +335,46 @@ export async function registerRoutes(app: FastifyInstance) {
     await audit(req.user.sub, "device.created", "Device", device.id, { homeId });
     return { success: true, data: mapDeviceForUi(device, null) };
   });
+
+  app.patch(
+    "/v1/homes/:homeId/devices/:deviceId/config",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { homeId, deviceId } = req.params as { homeId: string; deviceId: string };
+      if (!(await requireHomeRole(req.user.sub, homeId, "ADMIN"))) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
+      }
+      const parsed = patchDeviceConfigBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ success: false, error: "Invalid payload" });
+      }
+      const device = await prisma.device.findFirst({ where: { id: deviceId, homeId } });
+      if (!device) return reply.code(404).send({ success: false, error: "Device not found" });
+      const schema =
+        device.type === "water_meter"
+          ? waterMeterConfigSchema
+          : device.type === "energy_meter"
+            ? energyMeterConfigSchema
+            : null;
+      if (!schema) {
+        return reply.code(400).send({ success: false, error: "Device type has no config" });
+      }
+      const cfg = schema.safeParse(parsed.data.config);
+      if (!cfg.success) {
+        return reply.code(400).send({ success: false, error: "Invalid config" });
+      }
+      const updated = await prisma.device.update({
+        where: { id: deviceId },
+        data: { config: cfg.data },
+        include: { capabilities: true, room: true, lighting: true },
+      });
+      await audit(req.user.sub, "device.config_updated", "Device", deviceId, {
+        homeId,
+        config: cfg.data,
+      });
+      return { success: true, data: mapDeviceForUi(updated, await latestMetrics(deviceId)) };
+    }
+  );
 
   app.get(
     "/v1/homes/:homeId/devices/:deviceId/telemetry",

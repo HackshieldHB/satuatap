@@ -19,39 +19,51 @@ const MOTION_MS = Number(process.env.MOTION_INTERVAL_MS ?? 20000);
 const LIGHT_MS = Number(process.env.LIGHTING_INTERVAL_MS ?? 15000);
 
 const devices = {
-  energy: "dev-energy",
-  water: "dev-water",
-  envLiving: "dev-env-living",
-  envBed: "dev-env-bed",
-  pir: "dev-pir-living",
-  lightLiving: "dev-light-living",
-  lightBed: "dev-light-bed",
-  lightKitchen: "dev-light-kitchen",
+  energyMain: "energy-main",
+  energyAc: "energy-ac",
+  waterMain: "water-main",
+  waterKitchen: "water-kitchen",
+  envLiving: "env-living-room",
+  envBed: "env-bedroom",
+  pirLiving: "pir-living-room",
+  pirBed: "pir-bedroom",
+  lightLiving: "light-living-room",
+  lightBed: "light-bedroom",
+  lightKitchen: "light-kitchen",
+  lightSpare: "light-spare",
 };
 
 const nodes = [
-  { id: "esp32-energy-001", deviceIds: [devices.energy] },
+  { id: "esp32-energy-001", deviceIds: [devices.energyMain, devices.energyAc] },
   {
     id: "esp32-water-env-001",
-    deviceIds: [devices.water, devices.envLiving, devices.envBed, devices.pir],
+    deviceIds: [
+      devices.waterMain,
+      devices.waterKitchen,
+      devices.envLiving,
+      devices.envBed,
+      devices.pirLiving,
+      devices.pirBed,
+    ],
   },
   {
     id: "esp32-lighting-001",
-    deviceIds: [devices.lightLiving, devices.lightBed, devices.lightKitchen],
+    deviceIds: [devices.lightLiving, devices.lightBed, devices.lightKitchen, devices.lightSpare],
   },
 ] as const;
 
-const lights: Record<string, { on: boolean; brightness: number }> = {
-  [devices.lightLiving]: { on: false, brightness: 80 },
-  [devices.lightBed]: { on: false, brightness: 80 },
-  [devices.lightKitchen]: { on: false, brightness: 80 },
+const lights: Record<string, { on: boolean }> = {
+  [devices.lightLiving]: { on: false },
+  [devices.lightBed]: { on: false },
+  [devices.lightKitchen]: { on: false },
+  [devices.lightSpare]: { on: false },
 };
 
-let energyKwh = 4.5;
-let volumeLiters = 120;
-let pirMotion = false;
+let energyMainKwh = 4.5;
+let energyAcKwh = 1.2;
+let volumeMain = 120;
+let volumeKitchen = 40;
 
-const clients = new Map<string, MqttClient>();
 const deviceClient = new Map<string, MqttClient>();
 
 function nowTs() {
@@ -62,18 +74,24 @@ function jitter(base: number, amt: number) {
   return base + (Math.random() * 2 - 1) * amt;
 }
 
-function pub(
-  deviceId: string,
-  channel: MqttChannel,
-  payload: unknown,
-  retain = false
-) {
+function pub(deviceId: string, channel: MqttChannel, payload: unknown, retain = false) {
   const client = deviceClient.get(deviceId);
   if (!client) return;
   client.publish(mqttTopic(HOME_ID, deviceId, channel), JSON.stringify(payload), {
     qos: 1,
     retain,
   });
+}
+
+function energyMetrics(kwh: number) {
+  return {
+    voltage: Number(jitter(220, 4).toFixed(2)),
+    current: Number(jitter(2.1, 0.6).toFixed(3)),
+    power: Number(jitter(460, 120).toFixed(1)),
+    energy_kwh: Number(kwh.toFixed(4)),
+    frequency: Number(jitter(50, 0.2).toFixed(2)),
+    power_factor: Number(jitter(0.92, 0.04).toFixed(3)),
+  };
 }
 
 function connectNode(nodeId: string, deviceIds: readonly string[]) {
@@ -86,18 +104,13 @@ function connectNode(nodeId: string, deviceIds: readonly string[]) {
       retain: true,
     },
   });
-  clients.set(nodeId, client);
   for (const id of deviceIds) deviceClient.set(id, client);
 
   client.on("connect", () => {
     console.log(JSON.stringify({ msg: "Simulator MQTT connected", nodeId }));
     client.publish(
       nodeAvailabilityTopic(HOME_ID, nodeId),
-      JSON.stringify({
-        status: "online",
-        firmware: "sim-1.0.0",
-        rssi: -55,
-      }),
+      JSON.stringify({ status: "online", firmware: "sim-1.0.0", rssi: -55 }),
       { qos: 1, retain: true }
     );
     for (const id of deviceIds) {
@@ -115,23 +128,10 @@ function connectNode(nodeId: string, deviceIds: readonly string[]) {
     if (light) {
       if (cmd.type === "TURN_ON") light.on = true;
       if (cmd.type === "TURN_OFF") light.on = false;
-      if (cmd.type === "SET_BRIGHTNESS" && typeof cmd.params.brightness === "number") {
-        light.brightness = cmd.params.brightness;
-        light.on = true;
-      }
     }
-    pub(deviceId, "ack", {
-      commandId: cmd.commandId,
-      status: "SUCCEEDED",
-      error: null,
-    });
+    pub(deviceId, "ack", { commandId: cmd.commandId, status: "SUCCEEDED", error: null });
     if (light) {
-      pub(
-        deviceId,
-        "state",
-        { ts: nowTs(), metrics: { on: light.on, brightness: light.brightness } },
-        true
-      );
+      pub(deviceId, "state", { ts: nowTs(), metrics: { on: light.on } }, true);
     }
   });
 
@@ -145,28 +145,26 @@ for (const node of nodes) {
 }
 
 setInterval(() => {
-  energyKwh += 0.002 + Math.random() * 0.004;
-  pub(devices.energy, "telemetry", {
-    ts: nowTs(),
-    metrics: {
-      voltage: Number(jitter(220, 4).toFixed(2)),
-      current: Number(jitter(2.1, 0.6).toFixed(3)),
-      power: Number(jitter(460, 120).toFixed(1)),
-      energy_kwh: Number(energyKwh.toFixed(4)),
-      frequency: Number(jitter(50, 0.2).toFixed(2)),
-      power_factor: Number(jitter(0.92, 0.04).toFixed(3)),
-    },
-  });
+  energyMainKwh += 0.002 + Math.random() * 0.004;
+  energyAcKwh += 0.001 + Math.random() * 0.002;
+  pub(devices.energyMain, "telemetry", { ts: nowTs(), metrics: energyMetrics(energyMainKwh) });
+  pub(devices.energyAc, "telemetry", { ts: nowTs(), metrics: energyMetrics(energyAcKwh) });
 }, ENERGY_MS);
 
 setInterval(() => {
-  const flow = Math.max(0, jitter(8, 6));
-  volumeLiters += flow * (WATER_MS / 60000);
-  pub(devices.water, "telemetry", {
+  const flowMain = Math.max(0, jitter(8, 6));
+  const flowKitchen = Math.max(0, jitter(3, 2));
+  volumeMain += flowMain * (WATER_MS / 60000);
+  volumeKitchen += flowKitchen * (WATER_MS / 60000);
+  pub(devices.waterMain, "telemetry", {
+    ts: nowTs(),
+    metrics: { flow_lpm: Number(flowMain.toFixed(2)), volume_liters: Number(volumeMain.toFixed(2)) },
+  });
+  pub(devices.waterKitchen, "telemetry", {
     ts: nowTs(),
     metrics: {
-      flow_lpm: Number(flow.toFixed(2)),
-      volume_liters: Number(volumeLiters.toFixed(2)),
+      flow_lpm: Number(flowKitchen.toFixed(2)),
+      volume_liters: Number(volumeKitchen.toFixed(2)),
     },
   });
 }, WATER_MS);
@@ -189,15 +187,18 @@ setInterval(() => {
 }, ENV_MS);
 
 setInterval(() => {
-  pirMotion = Math.random() < 0.35;
-  pub(devices.pir, "event", {
+  pub(devices.pirLiving, "event", {
     ts: nowTs(),
-    event: pirMotion ? "MOTION_DETECTED" : "MOTION_CLEARED",
+    event: Math.random() < 0.35 ? "MOTION_DETECTED" : "MOTION_CLEARED",
+  });
+  pub(devices.pirBed, "event", {
+    ts: nowTs(),
+    event: Math.random() < 0.2 ? "MOTION_DETECTED" : "MOTION_CLEARED",
   });
 }, MOTION_MS);
 
 setInterval(() => {
   for (const [id, st] of Object.entries(lights)) {
-    pub(id, "state", { ts: nowTs(), metrics: { on: st.on, brightness: st.brightness } }, true);
+    pub(id, "state", { ts: nowTs(), metrics: { on: st.on } }, true);
   }
 }, LIGHT_MS);

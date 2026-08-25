@@ -96,6 +96,22 @@ export const createCommandBodySchema = z.object({
   idempotencyKey: z.string().min(8).max(128),
 });
 
+export const waterMeterConfigSchema = z.object({
+  pulsesPerLiter: z.number().positive(),
+  offsetLiters: z.number(),
+});
+
+export const energyMeterConfigSchema = z.object({
+  ctRatio: z.number().positive(),
+  offsetKwh: z.number(),
+});
+
+export const deviceConfigSchema = z.union([waterMeterConfigSchema, energyMeterConfigSchema]);
+
+export const patchDeviceConfigBodySchema = z.object({
+  config: z.record(z.unknown()),
+});
+
 export const loginBodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),

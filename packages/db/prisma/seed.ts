@@ -117,84 +117,147 @@ async function main() {
     roomId: string;
     type: string;
     name: string;
+    nodeId: string;
     capabilities: string[];
     isOn?: boolean;
+    config?: Record<string, unknown>;
   };
 
   const devices: SeedDevice[] = [
     {
-      id: "dev-energy",
+      id: "energy-main",
       homeId: "home-1",
       roomId: "room-1",
       type: "energy_meter",
-      name: "Energy Meter",
+      name: "Energy Main",
+      nodeId: "esp32-energy-001",
       capabilities: ["voltage", "current", "power", "energy", "frequency", "power_factor"],
+      config: { ctRatio: 1, offsetKwh: 0 },
     },
     {
-      id: "dev-water",
+      id: "energy-ac",
+      homeId: "home-1",
+      roomId: "room-2",
+      type: "energy_meter",
+      name: "Energy AC",
+      nodeId: "esp32-energy-001",
+      capabilities: ["voltage", "current", "power", "energy", "frequency", "power_factor"],
+      config: { ctRatio: 1, offsetKwh: 0 },
+    },
+    {
+      id: "water-main",
       homeId: "home-1",
       roomId: "room-3",
       type: "water_meter",
-      name: "Water Meter",
+      name: "Water Main",
+      nodeId: "esp32-water-env-001",
       capabilities: ["flow", "volume"],
+      config: { pulsesPerLiter: 450, offsetLiters: 0 },
     },
     {
-      id: "dev-env-living",
+      id: "water-kitchen",
+      homeId: "home-1",
+      roomId: "room-3",
+      type: "water_meter",
+      name: "Water Kitchen",
+      nodeId: "esp32-water-env-001",
+      capabilities: ["flow", "volume"],
+      config: { pulsesPerLiter: 450, offsetLiters: 0 },
+    },
+    {
+      id: "env-living-room",
       homeId: "home-1",
       roomId: "room-1",
       type: "environment_sensor",
-      name: "Living Room Temperature",
+      name: "Living Room Environment",
+      nodeId: "esp32-water-env-001",
       capabilities: ["temperature", "humidity"],
     },
     {
-      id: "dev-env-bed",
+      id: "env-bedroom",
       homeId: "home-1",
       roomId: "room-2",
       type: "environment_sensor",
-      name: "Bedroom Temperature",
+      name: "Bedroom Environment",
+      nodeId: "esp32-water-env-001",
       capabilities: ["temperature", "humidity"],
     },
     {
-      id: "dev-pir-living",
+      id: "pir-living-room",
       homeId: "home-1",
       roomId: "room-1",
       type: "motion_sensor",
       name: "Living Room Motion",
+      nodeId: "esp32-water-env-001",
       capabilities: ["motion"],
     },
     {
-      id: "dev-light-living",
+      id: "pir-bedroom",
+      homeId: "home-1",
+      roomId: "room-2",
+      type: "motion_sensor",
+      name: "Bedroom Motion",
+      nodeId: "esp32-water-env-001",
+      capabilities: ["motion"],
+    },
+    {
+      id: "light-living-room",
       homeId: "home-1",
       roomId: "room-1",
       type: "light",
       name: "Living Room Light",
-      capabilities: ["on_off", "brightness"],
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
       isOn: false,
     },
     {
-      id: "dev-light-bed",
+      id: "light-bedroom",
       homeId: "home-1",
       roomId: "room-2",
       type: "light",
       name: "Bedroom Light",
-      capabilities: ["on_off", "brightness"],
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
       isOn: false,
     },
     {
-      id: "dev-light-kitchen",
+      id: "light-kitchen",
       homeId: "home-1",
       roomId: "room-3",
       type: "light",
       name: "Kitchen Light",
-      capabilities: ["on_off", "brightness"],
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
+      isOn: false,
+    },
+    {
+      id: "light-spare",
+      homeId: "home-1",
+      roomId: "room-3",
+      type: "light",
+      name: "Spare Light",
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
       isOn: false,
     },
   ];
 
+  const keepIds = devices.map((d) => d.id);
+  await prisma.device.deleteMany({
+    where: { homeId: "home-1", id: { notIn: keepIds } },
+  });
+
   for (const d of devices) {
     await prisma.device.upsert({
       where: { id: d.id },
-      update: { name: d.name, type: d.type, isOn: d.isOn ?? null },
+      update: {
+        name: d.name,
+        type: d.type,
+        isOn: d.isOn ?? null,
+        nodeId: d.nodeId,
+        config: d.config ?? undefined,
+        protocol: "mqtt",
+      },
       create: {
         id: d.id,
         homeId: d.homeId,
@@ -205,6 +268,8 @@ async function main() {
         status: "unknown",
         firmwareModel: "simulator",
         firmwareVersion: "1.0.0",
+        nodeId: d.nodeId,
+        config: d.config ?? undefined,
         claimToken: `claim-${d.id}`,
         isOn: d.isOn ?? null,
       },
@@ -226,31 +291,66 @@ async function main() {
     if (d.type === "light") {
       await prisma.lightingState.upsert({
         where: { deviceId: d.id },
-        update: {},
-        create: { deviceId: d.id, isOn: d.isOn ?? false, brightness: 80 },
+        update: { brightness: null },
+        create: { deviceId: d.id, isOn: d.isOn ?? false, brightness: null },
       });
     }
   }
 
-  const existingRule = await prisma.automationRule.findFirst({
-    where: { id: "auto-motion-living" },
+  await prisma.gateway.upsert({
+    where: { id: "gw-pi-001" },
+    update: { name: "Raspberry Pi — Rumah Kevin", siteId: "site-1" },
+    create: {
+      id: "gw-pi-001",
+      siteId: "site-1",
+      name: "Raspberry Pi — Rumah Kevin",
+      version: "0.1.0",
+    },
   });
-  if (!existingRule) {
-    await prisma.automationRule.create({
-      data: {
-        id: "auto-motion-living",
-        homeId: "home-1",
-        name: "Living Room Motion Light",
-        enabled: true,
-        icon: "activity",
-        trigger: { type: "MOTION_DETECTED", deviceId: "dev-pir-living" },
-        conditions: [{ type: "TIME_RANGE", from: "00:00", to: "23:59" }],
-        actions: [{ type: "TURN_ON", deviceId: "dev-light-living" }],
-      },
-    });
-  }
 
-  console.log("Seed complete: user-1 / home-1 / 8 software devices");
+  await prisma.automationRule.upsert({
+    where: { id: "auto-living-motion-light" },
+    update: {
+      name: "Lampu ruang tamu saat ada gerakan",
+      enabled: true,
+      trigger: { type: "MOTION_DETECTED", deviceId: "pir-living-room" },
+      conditions: [{ type: "TIME_RANGE", from: "18:00", to: "23:00" }],
+      actions: [{ type: "TURN_ON", deviceId: "light-living-room" }],
+    },
+    create: {
+      id: "auto-living-motion-light",
+      homeId: "home-1",
+      name: "Lampu ruang tamu saat ada gerakan",
+      enabled: true,
+      icon: "activity",
+      trigger: { type: "MOTION_DETECTED", deviceId: "pir-living-room" },
+      conditions: [{ type: "TIME_RANGE", from: "18:00", to: "23:00" }],
+      actions: [{ type: "TURN_ON", deviceId: "light-living-room" }],
+    },
+  });
+  await prisma.automationRule.upsert({
+    where: { id: "auto-living-no-motion" },
+    update: {
+      name: "Matikan lampu jika sepi",
+      enabled: true,
+      trigger: { type: "NO_MOTION_FOR", deviceId: "pir-living-room", minutes: 10 },
+      conditions: [],
+      actions: [{ type: "TURN_OFF", deviceId: "light-living-room" }],
+    },
+    create: {
+      id: "auto-living-no-motion",
+      homeId: "home-1",
+      name: "Matikan lampu jika sepi",
+      enabled: true,
+      icon: "moon",
+      trigger: { type: "NO_MOTION_FOR", deviceId: "pir-living-room", minutes: 10 },
+      conditions: [],
+      actions: [{ type: "TURN_OFF", deviceId: "light-living-room" }],
+    },
+  });
+  await prisma.automationRule.deleteMany({ where: { id: "auto-motion-living" } });
+
+  console.log("Seed complete: user-1 / home-1 / 12 Phase 1 devices");
 }
 
 main()

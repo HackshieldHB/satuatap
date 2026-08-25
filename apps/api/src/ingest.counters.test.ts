@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@satu-atap/db";
 import { computeCounterDelta, ingestTelemetry } from "./ingest.js";
 
-const DEVICE_ID = "dev-energy";
+const DEVICE_ID = "energy-main";
 const HOME_ID = "home-1";
 
 describe("computeCounterDelta", () => {

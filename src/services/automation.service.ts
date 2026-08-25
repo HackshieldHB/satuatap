@@ -74,10 +74,10 @@ export class AutomationService {
           icon: rule.icon,
           trigger:
             rule.triggerType === "motion"
-              ? { type: "MOTION_DETECTED", deviceId: "dev-pir-living" }
+              ? { type: "MOTION_DETECTED", deviceId: "pir-living-room" }
               : { type: "TIME" },
           conditions: [{ type: "TIME_RANGE", from: "00:00", to: "23:59" }],
-          actions: [{ type: "TURN_ON", deviceId: "dev-light-living" }],
+          actions: [{ type: "TURN_ON", deviceId: "light-living-room" }],
         }),
       });
       if (!res.success || !res.data) return { success: false, error: res.error };
