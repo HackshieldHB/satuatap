@@ -1,76 +1,44 @@
 import { randomUUID } from "node:crypto";
 import { prisma, CommandStatus, type Prisma } from "@satu-atap/db";
-import { hasCapability } from "@satu-atap/shared";
+import {
+  clockInTimeZone,
+  conditionsPass,
+  evaluateRules,
+  hasCapability,
+  triggerMatches,
+  type Action,
+  type AutomationEvent,
+  type AutomationRule,
+  type Condition,
+  type EvaluationContext,
+  type Trigger,
+} from "@satu-atap/shared";
 import { hub } from "./events.js";
 import { config } from "./config.js";
 import { audit } from "./auth.js";
 
-type Trigger = {
-  type: string;
-  deviceId?: string;
-  metric?: string;
-  op?: "gt" | "lt" | "eq";
-  value?: number;
-};
-
-type Condition = { type: string; from?: string; to?: string };
-type Action = { type: string; deviceId: string; params?: Record<string, unknown> };
-
-function minutesNowJakarta(): number {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Jakarta",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date());
-  const h = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
-  const m = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
-  return h * 60 + m;
+function buildContext(lastMotionAt: Record<string, number>, at = new Date()): EvaluationContext {
+  const clock = clockInTimeZone(at, "Asia/Jakarta");
+  return {
+    nowMinutes: clock.nowMinutes,
+    timezone: "Asia/Jakarta",
+    lastMotionAt,
+    nowMs: at.getTime(),
+    weekday: clock.weekday,
+  };
 }
 
-function parseHm(hm: string): number {
-  const [h, m] = hm.split(":").map(Number);
-  return h * 60 + m;
-}
-
-export function inTimeRange(from: string, to: string, nowMin = minutesNowJakarta()): boolean {
-  const a = parseHm(from);
-  const b = parseHm(to);
-  if (a <= b) return nowMin >= a && nowMin <= b;
-  return nowMin >= a || nowMin <= b;
-}
-
-export function conditionsPass(conditions: Condition[], nowMin?: number): boolean {
-  for (const c of conditions) {
-    if (c.type === "TIME_RANGE" && c.from && c.to) {
-      if (!inTimeRange(c.from, c.to, nowMin)) return false;
-    }
+async function loadLastMotionAt(homeId: string): Promise<Record<string, number>> {
+  const rows = await prisma.motionEvent.findMany({
+    where: { homeId },
+    orderBy: { occurredAt: "desc" },
+    select: { deviceId: true, occurredAt: true },
+  });
+  const map: Record<string, number> = {};
+  for (const row of rows) {
+    if (map[row.deviceId] == null) map[row.deviceId] = row.occurredAt.getTime();
   }
-  return true;
-}
-
-export function triggerMatches(
-  trigger: Trigger,
-  event: { type: string; deviceId?: string; metrics?: Record<string, unknown> }
-): boolean {
-  if (trigger.type === "MOTION_DETECTED") {
-    return (
-      event.type === "MOTION_DETECTED" &&
-      (!trigger.deviceId || trigger.deviceId === event.deviceId)
-    );
-  }
-  if (trigger.type === "TELEMETRY_THRESHOLD" && trigger.metric && trigger.op != null) {
-    if (event.deviceId !== trigger.deviceId) return false;
-    const raw = event.metrics?.[trigger.metric];
-    if (typeof raw !== "number" || trigger.value == null) return false;
-    if (trigger.op === "gt") return raw > trigger.value;
-    if (trigger.op === "lt") return raw < trigger.value;
-    return raw === trigger.value;
-  }
-  if (trigger.type === "DEVICE_ON") {
-    return event.type === "DEVICE_ON" && trigger.deviceId === event.deviceId;
-  }
-  return false;
+  return map;
 }
 
 async function notifyGateway(commandId: string) {
@@ -153,17 +121,27 @@ export async function evaluateAutomations(event: {
   deviceId?: string;
   metrics?: Record<string, unknown>;
 }) {
-  const rules = await prisma.automationRule.findMany({
+  const rows = await prisma.automationRule.findMany({
     where: { homeId: event.homeId, enabled: true },
   });
+  const lastMotionAt = await loadLastMotionAt(event.homeId);
+  const ctx = buildContext(lastMotionAt);
+  const autoEvent: AutomationEvent = {
+    type: event.type,
+    deviceId: event.deviceId,
+    metrics: event.metrics,
+  };
+  const rules: AutomationRule[] = rows.map((rule) => ({
+    id: rule.id,
+    enabled: rule.enabled,
+    trigger: rule.trigger as Trigger,
+    conditions: (rule.conditions as Condition[]) ?? [],
+    actions: (rule.actions as Action[]) ?? [],
+  }));
 
   for (const rule of rules) {
-    const trigger = rule.trigger as Trigger;
-    const conditions = (rule.conditions as Condition[]) ?? [];
-    const actions = (rule.actions as Action[]) ?? [];
-
-    if (!triggerMatches(trigger, event)) continue;
-    if (!conditionsPass(conditions)) {
+    if (!triggerMatches(rule.trigger, autoEvent, ctx)) continue;
+    if (!conditionsPass(rule.conditions, ctx)) {
       await prisma.automationExecution.create({
         data: {
           ruleId: rule.id,
@@ -171,41 +149,43 @@ export async function evaluateAutomations(event: {
           result: { reason: "conditions_failed" },
         },
       });
-      continue;
     }
+  }
 
+  const plan = evaluateRules(rules, autoEvent, ctx);
+  for (const item of plan) {
     const commandIds: string[] = [];
     try {
-      for (const action of actions) {
+      for (const action of item.actions) {
         const cmd = await createCommand({
           homeId: event.homeId,
           deviceId: action.deviceId,
           type: action.type,
           params: action.params ?? {},
-          idempotencyKey: `auto:${rule.id}:${event.type}:${Date.now()}:${randomUUID()}`,
+          idempotencyKey: `auto:${item.dedupeKey}:${randomUUID()}`,
         });
         commandIds.push(cmd.id);
       }
       await prisma.automationExecution.create({
         data: {
-          ruleId: rule.id,
+          ruleId: item.ruleId,
           status: "executed",
-          result: { commandIds },
+          result: { commandIds, dedupeKey: item.dedupeKey },
         },
       });
       hub.publish({
         event: "AUTOMATION_EXECUTED",
         homeId: event.homeId,
-        data: { ruleId: rule.id, commandIds },
+        data: { ruleId: item.ruleId, commandIds },
         ts: new Date().toISOString(),
       });
       console.log(
-        JSON.stringify({ msg: "Automation executed", ruleId: rule.id, homeId: event.homeId })
+        JSON.stringify({ msg: "Automation executed", ruleId: item.ruleId, homeId: event.homeId })
       );
     } catch (err) {
       await prisma.automationExecution.create({
         data: {
-          ruleId: rule.id,
+          ruleId: item.ruleId,
           status: "failed",
           result: { error: err instanceof Error ? err.message : "unknown" },
         },
