@@ -51,24 +51,55 @@ async function latestMetrics(deviceId: string) {
   return (row?.metrics as Record<string, unknown> | undefined) ?? null;
 }
 
-async function metricDelta(
+async function sumDeltaMetric(
   homeId: string,
-  metric: string,
+  deltaKey: string,
   from: Date,
   to: Date
 ): Promise<number> {
   const rows = await prisma.telemetryReading.findMany({
     where: { homeId, recordedAt: { gte: from, lt: to } },
-    orderBy: { recordedAt: "asc" },
+    select: { metrics: true },
   });
-  const values = rows
-    .map((r) => (r.metrics as Record<string, unknown>)[metric])
-    .filter((v): v is number => typeof v === "number");
-  if (values.length === 0) return 0;
-  const last = values[values.length - 1];
-  const first = values[0];
-  const delta = last - first;
-  return delta > 0 ? delta : last;
+  let sum = 0;
+  for (const r of rows) {
+    const v = (r.metrics as Record<string, unknown>)[deltaKey];
+    if (typeof v === "number") sum += v;
+  }
+  return sum;
+}
+
+async function powerStats(
+  homeId: string,
+  from: Date,
+  to: Date
+): Promise<{ peak: number; average: number }> {
+  const rows = await prisma.telemetryAggregate.findMany({
+    where: {
+      homeId,
+      metric: "power",
+      period: "hour",
+      periodStart: { gte: from, lt: to },
+    },
+  });
+  if (rows.length === 0) {
+    const readings = await prisma.telemetryReading.findMany({
+      where: { homeId, recordedAt: { gte: from, lt: to } },
+      select: { metrics: true },
+    });
+    const powers = readings
+      .map((r) => (r.metrics as Record<string, unknown>).power)
+      .filter((v): v is number => typeof v === "number");
+    if (powers.length === 0) return { peak: 0, average: 0 };
+    return {
+      peak: Math.max(...powers),
+      average: powers.reduce((a, b) => a + b, 0) / powers.length,
+    };
+  }
+  return {
+    peak: Math.max(...rows.map((r) => r.max)),
+    average: rows.reduce((a, r) => a + r.avg * r.sampleCount, 0) / Math.max(1, rows.reduce((a, r) => a + r.sampleCount, 0)),
+  };
 }
 
 export async function registerRoutes(app: FastifyInstance) {
@@ -381,8 +412,9 @@ export async function registerRoutes(app: FastifyInstance) {
     const todayStart = startOfUtcDay();
     const yesterdayStart = new Date(todayStart);
     yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
-    const todayKwh = await metricDelta(homeId, "energy_kwh", todayStart, new Date());
-    const yesterdayKwh = await metricDelta(homeId, "energy_kwh", yesterdayStart, todayStart);
+    const todayKwh = await sumDeltaMetric(homeId, "energy_kwh_delta", todayStart, new Date());
+    const yesterdayKwh = await sumDeltaMetric(homeId, "energy_kwh_delta", yesterdayStart, todayStart);
+    const { peak, average } = await powerStats(homeId, todayStart, new Date());
     const comparisonPercent =
       yesterdayKwh > 0 ? Math.round((Math.abs(todayKwh - yesterdayKwh) / yesterdayKwh) * 100) : 0;
     const history = [];
@@ -391,7 +423,7 @@ export async function registerRoutes(app: FastifyInstance) {
       end.setUTCDate(end.getUTCDate() + 1);
       history.push({
         label: d.label,
-        value: Number((await metricDelta(homeId, "energy_kwh", d.start, end)).toFixed(2)),
+        value: Number((await sumDeltaMetric(homeId, "energy_kwh_delta", d.start, end)).toFixed(2)),
       });
     }
     const latest = await prisma.telemetryReading.findFirst({
@@ -418,6 +450,8 @@ export async function registerRoutes(app: FastifyInstance) {
         },
         tariffPerKwh: rate,
         currency: tariff?.currency ?? "IDR",
+        peak,
+        average,
       },
     };
   });
@@ -432,8 +466,8 @@ export async function registerRoutes(app: FastifyInstance) {
     const todayStart = startOfUtcDay();
     const yesterdayStart = new Date(todayStart);
     yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
-    const todayLiters = await metricDelta(homeId, "volume_liters", todayStart, new Date());
-    const yesterday = await metricDelta(homeId, "volume_liters", yesterdayStart, todayStart);
+    const todayLiters = await sumDeltaMetric(homeId, "volume_liters_delta", todayStart, new Date());
+    const yesterday = await sumDeltaMetric(homeId, "volume_liters_delta", yesterdayStart, todayStart);
     const comparisonPercent =
       yesterday > 0 ? Math.round((Math.abs(todayLiters - yesterday) / yesterday) * 100) : 0;
     const history = [];
@@ -442,7 +476,7 @@ export async function registerRoutes(app: FastifyInstance) {
       end.setUTCDate(end.getUTCDate() + 1);
       history.push({
         label: d.label,
-        value: Math.round(await metricDelta(homeId, "volume_liters", d.start, end)),
+        value: Math.round(await sumDeltaMetric(homeId, "volume_liters_delta", d.start, end)),
       });
     }
     const latest = await prisma.telemetryReading.findFirst({

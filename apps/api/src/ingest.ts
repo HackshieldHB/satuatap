@@ -1,26 +1,71 @@
 import { prisma, type Prisma } from "@satu-atap/db";
+import {
+  COUNTER_DELTA_CEILINGS,
+  COUNTER_METRICS,
+  INSTANT_METRICS,
+  type CounterMetric,
+} from "@satu-atap/shared";
 import { evaluateAutomations } from "./automation.js";
 import { hub } from "./events.js";
-
-const NUMERIC_METRICS = [
-  "voltage",
-  "current",
-  "power",
-  "energy_kwh",
-  "frequency",
-  "power_factor",
-  "flow_lpm",
-  "volume_liters",
-  "temperature_c",
-  "humidity_pct",
-  "rssi",
-  "brightness",
-] as const;
 
 function hourStart(d: Date): Date {
   const x = new Date(d);
   x.setUTCMinutes(0, 0, 0);
   return x;
+}
+
+export function computeCounterDelta(
+  previous: number | null,
+  current: number,
+  metric: CounterMetric
+): { delta: number; warning?: string } {
+  if (previous == null) return { delta: 0 };
+  const delta = current - previous;
+  if (delta < 0) {
+    return {
+      delta: 0,
+      warning: "counter_reset",
+    };
+  }
+  const ceiling = COUNTER_DELTA_CEILINGS[metric];
+  if (delta > ceiling) {
+    return { delta: 0, warning: "implausible_jump" };
+  }
+  return { delta };
+}
+
+async function enrichCounterDeltas(
+  deviceId: string,
+  metrics: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const enriched = { ...metrics };
+  for (const metric of COUNTER_METRICS) {
+    const current = metrics[metric];
+    if (typeof current !== "number") continue;
+    const snap = await prisma.deviceCounterSnapshot.findUnique({
+      where: { deviceId_metric: { deviceId, metric } },
+    });
+    const previous = snap?.value ?? null;
+    const { delta, warning } = computeCounterDelta(previous, current, metric);
+    if (warning) {
+      console.warn(
+        JSON.stringify({
+          msg: warning === "counter_reset" ? "Counter reset" : "Implausible counter jump",
+          deviceId,
+          metric,
+          previous,
+          current,
+        })
+      );
+    }
+    enriched[`${metric}_delta`] = delta;
+    await prisma.deviceCounterSnapshot.upsert({
+      where: { deviceId_metric: { deviceId, metric } },
+      update: { value: current },
+      create: { deviceId, metric, value: current },
+    });
+  }
+  return enriched;
 }
 
 export async function ingestTelemetry(input: {
@@ -35,47 +80,44 @@ export async function ingestTelemetry(input: {
   });
   if (!device) return { ok: false as const, error: "unknown_device" };
 
+  const metrics = await enrichCounterDeltas(input.deviceId, input.metrics);
+
   const reading = await prisma.telemetryReading.create({
     data: {
       homeId: input.homeId,
       deviceId: input.deviceId,
       recordedAt: input.recordedAt,
-      metrics: input.metrics as Prisma.InputJsonValue,
+      metrics: metrics as Prisma.InputJsonValue,
     },
   });
 
-  if (typeof input.metrics.motion === "boolean") {
+  if (typeof metrics.motion === "boolean") {
     await prisma.motionEvent.create({
       data: {
         homeId: input.homeId,
         deviceId: input.deviceId,
-        kind: input.metrics.motion ? "MOTION_DETECTED" : "MOTION_CLEARED",
+        kind: metrics.motion ? "MOTION_DETECTED" : "MOTION_CLEARED",
         occurredAt: input.recordedAt,
       },
     });
   }
 
-  if (typeof input.metrics.on === "boolean") {
+  if (typeof metrics.on === "boolean") {
     await prisma.device.update({
       where: { id: input.deviceId },
-      data: { isOn: input.metrics.on },
+      data: { isOn: metrics.on },
     });
     await prisma.lightingState.upsert({
       where: { deviceId: input.deviceId },
       update: {
-        isOn: input.metrics.on,
+        isOn: metrics.on,
         brightness:
-          typeof input.metrics.brightness === "number"
-            ? input.metrics.brightness
-            : undefined,
+          typeof metrics.brightness === "number" ? metrics.brightness : undefined,
       },
       create: {
         deviceId: input.deviceId,
-        isOn: input.metrics.on,
-        brightness:
-          typeof input.metrics.brightness === "number"
-            ? input.metrics.brightness
-            : 80,
+        isOn: metrics.on,
+        brightness: typeof metrics.brightness === "number" ? metrics.brightness : 80,
       },
     });
   }
@@ -89,29 +131,29 @@ export async function ingestTelemetry(input: {
     },
   });
 
-  await upsertHourlyAggregates(input);
+  await upsertHourlyAggregates({ ...input, metrics });
 
   hub.publish({
     event: input.source === "state" ? "DEVICE_STATE_UPDATED" : "DEVICE_TELEMETRY_UPDATED",
     homeId: input.homeId,
     deviceId: input.deviceId,
-    data: input.metrics,
+    data: metrics,
     ts: input.recordedAt.toISOString(),
   });
 
-  if (input.metrics.motion === true) {
+  if (metrics.motion === true) {
     await evaluateAutomations({
       homeId: input.homeId,
       type: "MOTION_DETECTED",
       deviceId: input.deviceId,
-      metrics: input.metrics,
+      metrics,
     });
   } else {
     await evaluateAutomations({
       homeId: input.homeId,
       type: "TELEMETRY",
       deviceId: input.deviceId,
-      metrics: input.metrics,
+      metrics,
     });
   }
 
@@ -125,9 +167,12 @@ async function upsertHourlyAggregates(input: {
   metrics: Record<string, unknown>;
 }) {
   const start = hourStart(input.recordedAt);
-  for (const metric of NUMERIC_METRICS) {
-    const value = input.metrics[metric];
-    if (typeof value !== "number") continue;
+
+  const upsert = async (
+    metric: string,
+    kind: "counter" | "delta" | "instant",
+    value: number
+  ) => {
     const existing = await prisma.telemetryAggregate.findUnique({
       where: {
         deviceId_period_periodStart_metric: {
@@ -146,28 +191,57 @@ async function upsertHourlyAggregates(input: {
           period: "hour",
           periodStart: start,
           metric,
-          avg: value,
-          min: value,
-          max: value,
-          sum: value,
-          last: value,
+          avg: kind === "instant" ? value : 0,
+          min: kind === "instant" ? value : 0,
+          max: kind === "instant" ? value : 0,
+          sum: kind === "delta" ? value : 0,
+          last: kind === "delta" ? 0 : value,
+          first: kind === "delta" ? null : value,
           sampleCount: 1,
         },
       });
-    } else {
-      const n = existing.sampleCount + 1;
+      return;
+    }
+    if (kind === "counter") {
+      await prisma.telemetryAggregate.update({
+        where: { id: existing.id },
+        data: { last: value, sampleCount: existing.sampleCount + 1 },
+      });
+      return;
+    }
+    if (kind === "delta") {
       await prisma.telemetryAggregate.update({
         where: { id: existing.id },
         data: {
-          avg: (existing.avg * existing.sampleCount + value) / n,
-          min: Math.min(existing.min, value),
-          max: Math.max(existing.max, value),
           sum: existing.sum + value,
-          last: value,
-          sampleCount: n,
+          sampleCount: existing.sampleCount + 1,
         },
       });
+      return;
     }
+    const n = existing.sampleCount + 1;
+    await prisma.telemetryAggregate.update({
+      where: { id: existing.id },
+      data: {
+        avg: (existing.avg * existing.sampleCount + value) / n,
+        min: Math.min(existing.min, value),
+        max: Math.max(existing.max, value),
+        last: value,
+        sampleCount: n,
+      },
+    });
+  };
+
+  for (const metric of COUNTER_METRICS) {
+    const value = input.metrics[metric];
+    if (typeof value === "number") await upsert(metric, "counter", value);
+    const delta = input.metrics[`${metric}_delta`];
+    if (typeof delta === "number") await upsert(`${metric}_delta`, "delta", delta);
+  }
+
+  for (const metric of INSTANT_METRICS) {
+    const value = input.metrics[metric];
+    if (typeof value === "number") await upsert(metric, "instant", value);
   }
 }
 

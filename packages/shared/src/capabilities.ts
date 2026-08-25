@@ -55,6 +55,32 @@ export function hasCapability(
   return capabilities.includes(cap);
 }
 
+export const COUNTER_METRICS = ["energy_kwh", "volume_liters"] as const;
+export type CounterMetric = (typeof COUNTER_METRICS)[number];
+
+export const INSTANT_METRICS = [
+  "voltage",
+  "current",
+  "power",
+  "frequency",
+  "power_factor",
+  "flow_lpm",
+  "temperature_c",
+  "humidity_pct",
+  "rssi",
+  "brightness",
+] as const;
+export type InstantMetric = (typeof INSTANT_METRICS)[number];
+
+export const COUNTER_DELTA_CEILINGS: Record<CounterMetric, number> = {
+  energy_kwh: 5,
+  volume_liters: 500,
+};
+
+export function isCounterMetric(key: string): key is CounterMetric {
+  return (COUNTER_METRICS as readonly string[]).includes(key);
+}
+
 /** Maps future hardware SKUs to logical device types. Not used at runtime for branching. */
 export const HARDWARE_SKU_MAP = {
   "pzem-004t": "energy_meter",

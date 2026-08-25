@@ -117,6 +117,10 @@ client.on("message", async (topic, payload) => {
       log("warn", "Telemetry rejected", { deviceId, reason: "schema" });
       return;
     }
+    if (Object.keys(ok.data.metrics).some((k) => k.endsWith("_delta"))) {
+      log("warn", "Telemetry rejected", { deviceId, reason: "client_delta" });
+      return;
+    }
     const res = await apiPost("/internal/telemetry", {
       homeId,
       deviceId,
@@ -131,6 +135,10 @@ client.on("message", async (topic, payload) => {
     const ok = statePayloadSchema.safeParse(json);
     if (!ok.success) {
       log("warn", "State rejected", { deviceId, reason: "schema" });
+      return;
+    }
+    if (Object.keys(ok.data.metrics).some((k) => k.endsWith("_delta"))) {
+      log("warn", "State rejected", { deviceId, reason: "client_delta" });
       return;
     }
     const res = await apiPost("/internal/telemetry", {

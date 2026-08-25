@@ -200,6 +200,7 @@ model Device {
   sensors      Sensor[]
   telemetry    TelemetryReading[]
   aggregates   TelemetryAggregate[]
+  counters     DeviceCounterSnapshot[]
   heartbeats   DeviceHeartbeat[]
   lighting     LightingState?
   commands     Command[]
@@ -245,6 +246,16 @@ model TelemetryReading {
   @@index([deviceId, recordedAt])
 }
 
+model DeviceCounterSnapshot {
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  metric    String
+  value     Float
+  updatedAt DateTime @updatedAt
+
+  @@id([deviceId, metric])
+}
+
 model TelemetryAggregate {
   id          String          @id @default(cuid())
   homeId      String
@@ -259,6 +270,7 @@ model TelemetryAggregate {
   max         Float
   sum         Float
   last        Float
+  first       Float?
   sampleCount Int             @default(0)
 
   @@unique([deviceId, period, periodStart, metric])

@@ -72,4 +72,16 @@ describe("gateway contracts", () => {
     });
     expect(r.success).toBe(false);
   });
+
+  it("rejects client-supplied delta keys at the gateway boundary", () => {
+    const payload = {
+      ts: "2026-08-25T05:00:00.000Z",
+      metrics: { energy_kwh: 4.72, energy_kwh_delta: 0.01 },
+    };
+    const parsed = telemetryPayloadSchema.safeParse(payload);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(Object.keys(parsed.data.metrics).some((k) => k.endsWith("_delta"))).toBe(true);
+    }
+  });
 });

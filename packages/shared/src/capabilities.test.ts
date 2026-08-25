@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CAPABILITIES, hasCapability } from "./capabilities.js";
+import { DEFAULT_CAPABILITIES, hasCapability, isCounterMetric } from "./capabilities.js";
 import { parseMqttTopic, mqttTopic } from "./mqtt.js";
 import { telemetryPayloadSchema } from "./schemas.js";
 
@@ -17,6 +17,10 @@ describe("capabilities", () => {
   });
   it("lights expose on_off", () => {
     expect(hasCapability(DEFAULT_CAPABILITIES.light, "on_off")).toBe(true);
+  });
+  it("classifies counter metrics", () => {
+    expect(isCounterMetric("energy_kwh")).toBe(true);
+    expect(isCounterMetric("power")).toBe(false);
   });
 });
 
