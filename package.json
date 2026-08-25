@@ -2,6 +2,10 @@
   "name": "satu-atap",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,7 +13,17 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:backend": "npm test -w @satu-atap/shared && npm test -w @satu-atap/api && npm test -w @satu-atap/iot-gateway",
+    "dev:api": "npm run dev -w @satu-atap/api",
+    "dev:gateway": "npm run dev -w @satu-atap/iot-gateway",
+    "dev:simulator": "npm run start -w @satu-atap/iot-simulator",
+    "db:generate": "npm run generate -w @satu-atap/db",
+    "db:migrate": "npm run migrate -w @satu-atap/db",
+    "db:migrate:deploy": "npm run migrate:deploy -w @satu-atap/db",
+    "db:seed": "npm run seed -w @satu-atap/db",
+    "stack:up": "docker compose up -d postgres mosquitto",
+    "stack:down": "docker compose down"
   },
   "engines": {
     "node": ">=20"

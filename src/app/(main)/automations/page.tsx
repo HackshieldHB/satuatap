@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/Input";
 import { Toggle } from "@/components/ui/Toggle";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/hooks/useToast";
+import { useAuth } from "@/hooks/useAuth";
+import { automationService } from "@/services/automation.service";
 import { resolveIcon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import {
-  MOCK_AUTOMATIONS,
   AUTOMATION_TRIGGERS,
   AUTOMATION_ACTIONS,
 } from "@/data/mock";
@@ -20,25 +21,38 @@ import type { AutomationRule, AutomationTriggerType } from "@/types";
 
 export default function AutomationsPage() {
   const { showToast } = useToast();
-  const [rules, setRules] = useState<AutomationRule[]>(() =>
-    MOCK_AUTOMATIONS.map((r) => ({ ...r }))
-  );
+  const { session } = useAuth();
+  const homeId = session?.selectedHomeId || "home-1";
+  const [rules, setRules] = useState<AutomationRule[]>([]);
   const [creating, setCreating] = useState(false);
 
-  const toggle = (id: string) =>
-    setRules((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
-    );
+  useEffect(() => {
+    automationService.list(homeId).then((res) => {
+      if (res.success && res.data) setRules(res.data);
+    });
+  }, [homeId]);
+
+  const toggle = (id: string) => {
+    const current = rules.find((r) => r.id === id);
+    if (!current) return;
+    const next = !current.enabled;
+    setRules((prev) => prev.map((r) => (r.id === id ? { ...r, enabled: next } : r)));
+    void automationService.setEnabled(homeId, id, next);
+  };
 
   const remove = (id: string) => {
     setRules((prev) => prev.filter((r) => r.id !== id));
+    void automationService.remove(homeId, id);
     showToast("Otomatisasi dihapus.", "info");
   };
 
-  const create = (rule: AutomationRule) => {
-    setRules((prev) => [rule, ...prev]);
-    setCreating(false);
-    showToast("Otomatisasi dibuat 🎉", "success");
+  const create = async (rule: AutomationRule) => {
+    const res = await automationService.createUiRule(homeId, rule);
+    if (res.success && res.data) {
+      setRules((prev) => [res.data!, ...prev]);
+      setCreating(false);
+      showToast("Otomatisasi dibuat 🎉", "success");
+    }
   };
 
   const activeCount = rules.filter((r) => r.enabled).length;

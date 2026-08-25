@@ -1,9 +1,11 @@
 # SATU ATAP — Rumahmu, Lebih Pintar
 
-SATU ATAP is a smart-home companion app (Phase 1 UI/UX foundation). This phase is a
-**fully client-side, mock-data build** — there is no backend, database, or real
-integration. Authentication, devices, rooms, AI insights, payments, and ads are
-all driven by in-memory mock services so the app runs entirely on `localhost`.
+SATU ATAP is a smart-home companion app. The **web UI** is still a Next.js 15 PWA
+and defaults to mock services so `npm run dev` needs no Docker.
+
+A **software IoT foundation** (Fastify API, PostgreSQL, Mosquitto, IoT gateway,
+MQTT simulator) lives beside the UI. **No physical hardware is connected.**
+See `docs/architecture/README.md`.
 
 ---
 
@@ -13,6 +15,7 @@ all driven by in-memory mock services so the app runs entirely on `localhost`.
 | --------------- | --------------------------------------------------- |
 | Node.js         | **>= 20** (developed & verified on Node 24 LTS)     |
 | Package manager | **npm** (repo ships `package-lock.json`)            |
+| Docker          | optional — Postgres / MQTT stack                    |
 | Git             | any recent version                                  |
 
 > This project uses npm. A `package-lock.json` is committed — do not switch
@@ -33,6 +36,8 @@ npm -v
 - **TypeScript 5** (strict mode)
 - **Tailwind CSS 3**
 - **lucide-react** icons
+- **Fastify** API + **Prisma** + PostgreSQL (`apps/api`, `packages/db`)
+- **MQTT** Mosquitto + gateway (`apps/iot-gateway`) — not inside Next.js
 - Image optimization via **sharp** (used automatically by `next/image`)
 
 ---
@@ -47,16 +52,16 @@ npm install
 
 ## Environment
 
-Phase 1 requires **no environment variables** — it runs as-is.
+The UI requires **no env vars** (mock mode). Copy `.env.example` to `.env.local`
+to point at the API:
 
-A documented `.env.example` is provided for future phases. To create a local
-override (optional):
-
-```bash
-cp .env.example .env.local
+```
+NEXT_PUBLIC_ENABLE_MOCK_DATA=false
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
-`.env.local` is git-ignored. Never commit real secrets.
+API/gateway/Prisma use `DATABASE_URL`, `JWT_SECRET`, `MQTT_URL`, `INTERNAL_API_KEY`.
+Never commit secrets.
 
 ---
 
@@ -66,14 +71,25 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open **http://localhost:3000**.
+Open **http://localhost:3000**. If 3000 is busy, use another port **other than 3001**
+(the API uses 3001): `npm run dev -- -p 3002`.
 
-If port 3000 is busy, Next.js will offer the next free port (e.g. 3001), or you
-can force one:
+### Full software stack (simulator, no hardware)
 
 ```bash
-npm run dev -- -p 3001
+docker compose up -d postgres mosquitto
+cp .env.example .env
+npm run db:generate
+npm run db:migrate
+npm run db:seed
+npm run dev:api
+npm run dev:gateway
+npm run dev:simulator
+npm run dev
 ```
+
+Demo login is unchanged. Set `NEXT_PUBLIC_ENABLE_MOCK_DATA=false` in `.env.local`
+to load dashboard/devices/energy/water from the API.
 
 ---
 

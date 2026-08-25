@@ -57,6 +57,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
+    const t = setInterval(loadData, 15000);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homeId]);
 

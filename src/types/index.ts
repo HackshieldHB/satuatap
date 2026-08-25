@@ -122,6 +122,10 @@ export interface Device {
   value?: string;
   isOn?: boolean;
   lastUpdated: string;
+  /** Capability keys from the API (e.g. power, on_off). Optional in mock mode. */
+  capabilities?: string[];
+  lastSeen?: string;
+  firmware?: { model?: string; version?: string };
 }
 
 export interface EnergyUsage {

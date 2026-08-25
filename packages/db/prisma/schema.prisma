@@ -1,0 +1,392 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum HomeType {
+  apartment
+  house
+  villa
+  other
+}
+
+enum DeviceProtocol {
+  wifi
+  bluetooth
+  zigbee
+  matter
+  mqtt
+  other
+}
+
+enum DeviceAvailability {
+  online
+  offline
+  unknown
+}
+
+enum MembershipRole {
+  ADMIN
+  USER
+  VIEWER
+}
+
+enum CommandStatus {
+  PENDING
+  SENT
+  ACKNOWLEDGED
+  SUCCEEDED
+  FAILED
+  TIMEOUT
+  EXPIRED
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+enum AlertStatus {
+  open
+  acknowledged
+  resolved
+}
+
+enum AlertType {
+  HIGH_ELECTRICITY
+  ABNORMAL_WATER
+  POSSIBLE_LEAK
+  DEVICE_OFFLINE
+  SENSOR_ERROR
+}
+
+enum AggregatePeriod {
+  hour
+  day
+  week
+  month
+}
+
+model User {
+  id           String   @id
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  createdAt    DateTime @default(now())
+
+  ownedHomes   Home[]       @relation("HomeOwner")
+  memberships  Membership[]
+  auditLogs    AuditLog[]
+  acknowledged Alert[]      @relation("AlertAck")
+  commands     Command[]
+}
+
+model Organization {
+  id        String   @id
+  name      String
+  createdAt DateTime @default(now())
+  sites     Site[]
+  homes     Home[]
+}
+
+model Site {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  timezone       String       @default("Asia/Jakarta")
+  buildings      Building[]
+  homes          Home[]
+}
+
+model Building {
+  id     String  @id
+  siteId String
+  site   Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name   String
+  floors Floor[]
+  homes  Home[]
+}
+
+model Floor {
+  id         String   @id
+  buildingId String
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  name       String
+  homes      Home[]
+}
+
+model Home {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  siteId         String?
+  site           Site?        @relation(fields: [siteId], references: [id])
+  buildingId     String?
+  building       Building?    @relation(fields: [buildingId], references: [id])
+  floorId        String?
+  floor          Floor?       @relation(fields: [floorId], references: [id])
+  ownerId        String
+  owner          User         @relation("HomeOwner", fields: [ownerId], references: [id])
+  name           String
+  type           HomeType     @default(house)
+  location       String       @default("")
+  createdAt      DateTime     @default(now())
+
+  rooms            Room[]
+  devices          Device[]
+  memberships      Membership[]
+  telemetry        TelemetryReading[]
+  aggregates       TelemetryAggregate[]
+  commands         Command[]
+  automations      AutomationRule[]
+  alerts           Alert[]
+  motionEvents     MotionEvent[]
+  utilityConfig    UtilityConfig?
+}
+
+model Membership {
+  userId String
+  homeId String
+  role   MembershipRole
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  home   Home           @relation(fields: [homeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, homeId])
+}
+
+model Room {
+  id        String   @id
+  homeId    String
+  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  name      String
+  icon      String?
+  createdAt DateTime @default(now())
+  devices   Device[]
+  alerts    Alert[]
+}
+
+model Device {
+  id              String             @id
+  homeId          String
+  home            Home               @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  roomId          String
+  room            Room               @relation(fields: [roomId], references: [id])
+  type            String
+  name            String
+  protocol        DeviceProtocol     @default(mqtt)
+  status          DeviceAvailability @default(unknown)
+  lastSeen        DateTime?
+  lastHeartbeat   DateTime?
+  ipAddress       String?
+  firmwareModel   String?
+  firmwareVersion String?
+  hardwareVersion String?
+  claimToken      String?
+  isOn            Boolean?
+  createdAt       DateTime           @default(now())
+
+  capabilities DeviceCapability[]
+  credential   DeviceCredential?
+  sensors      Sensor[]
+  telemetry    TelemetryReading[]
+  aggregates   TelemetryAggregate[]
+  heartbeats   DeviceHeartbeat[]
+  lighting     LightingState?
+  commands     Command[]
+  motionEvents MotionEvent[]
+  alerts       Alert[]
+}
+
+model DeviceCapability {
+  deviceId   String
+  capability String
+  device     Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@id([deviceId, capability])
+}
+
+model DeviceCredential {
+  deviceId         String @id
+  device           Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  mqttUsername     String @unique
+  mqttPasswordHash String
+  deviceSecretHash String
+}
+
+model Sensor {
+  id       String @id @default(cuid())
+  deviceId String
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  kind     String
+  label    String
+}
+
+model TelemetryReading {
+  id         String   @id @default(cuid())
+  homeId     String
+  home       Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  deviceId   String
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  recordedAt DateTime
+  metrics    Json
+  createdAt  DateTime @default(now())
+
+  @@index([homeId, recordedAt])
+  @@index([deviceId, recordedAt])
+}
+
+model TelemetryAggregate {
+  id          String          @id @default(cuid())
+  homeId      String
+  home        Home            @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  deviceId    String
+  device      Device          @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  period      AggregatePeriod
+  periodStart DateTime
+  metric      String
+  avg         Float
+  min         Float
+  max         Float
+  sum         Float
+  last        Float
+  sampleCount Int             @default(0)
+
+  @@unique([deviceId, period, periodStart, metric])
+  @@index([homeId, period, periodStart])
+}
+
+model MotionEvent {
+  id         String   @id @default(cuid())
+  homeId     String
+  home       Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  deviceId   String
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  kind       String
+  occurredAt DateTime
+
+  @@index([homeId, occurredAt])
+}
+
+model LightingState {
+  deviceId   String   @id
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  isOn       Boolean
+  brightness Int?
+  updatedAt  DateTime @updatedAt
+}
+
+model Command {
+  id              String        @id @default(cuid())
+  homeId          String
+  home            Home          @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  deviceId        String
+  device          Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  createdById     String?
+  createdBy       User?         @relation(fields: [createdById], references: [id])
+  type            String
+  params          Json
+  idempotencyKey  String
+  status          CommandStatus @default(PENDING)
+  error           String?
+  createdAt       DateTime      @default(now())
+  sentAt          DateTime?
+  acknowledgedAt  DateTime?
+  completedAt     DateTime?
+  expiresAt       DateTime?
+
+  ack CommandAcknowledgement?
+
+  @@unique([homeId, idempotencyKey])
+  @@index([status, createdAt])
+}
+
+model CommandAcknowledgement {
+  id         String   @id @default(cuid())
+  commandId  String   @unique
+  command    Command  @relation(fields: [commandId], references: [id], onDelete: Cascade)
+  payload    Json
+  receivedAt DateTime @default(now())
+}
+
+model AutomationRule {
+  id          String   @id @default(cuid())
+  homeId      String
+  home        Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  name        String
+  enabled     Boolean  @default(true)
+  trigger     Json
+  conditions  Json
+  actions     Json
+  icon        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  executions  AutomationExecution[]
+}
+
+model AutomationExecution {
+  id          String         @id @default(cuid())
+  ruleId      String
+  rule        AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  status      String
+  triggeredAt DateTime       @default(now())
+  result      Json?
+}
+
+model Alert {
+  id              String        @id @default(cuid())
+  homeId          String
+  home            Home          @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  deviceId        String?
+  device          Device?       @relation(fields: [deviceId], references: [id])
+  roomId          String?
+  room            Room?         @relation(fields: [roomId], references: [id])
+  severity        AlertSeverity
+  type            AlertType
+  title           String
+  message         String
+  status          AlertStatus   @default(open)
+  createdAt       DateTime      @default(now())
+  acknowledgedAt  DateTime?
+  acknowledgedById String?
+  acknowledgedBy  User?         @relation("AlertAck", fields: [acknowledgedById], references: [id])
+
+  @@index([homeId, createdAt])
+}
+
+model DeviceHeartbeat {
+  id         String   @id @default(cuid())
+  deviceId   String
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  receivedAt DateTime @default(now())
+  rssi       Int?
+
+  @@index([deviceId, receivedAt])
+}
+
+model UtilityConfig {
+  homeId                    String @id
+  home                      Home   @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  electricityTariffPerKwh   Decimal @db.Decimal(12, 4)
+  waterTariffPerM3          Decimal @db.Decimal(12, 4)
+  currency                  String  @default("IDR")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

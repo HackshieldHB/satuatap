@@ -81,7 +81,7 @@ export function DeviceCard({
   const handleToggle = async (e?: React.MouseEvent) => {
     e?.stopPropagation();
     setLoading(true);
-    const result = await deviceService.toggleDevice(device.id);
+    const result = await deviceService.toggleDevice(device.id, device.homeId);
     if (result.success && result.data) {
       setIsOn(result.data.isOn);
       onToggle?.(device.id, result.data.isOn);
@@ -90,7 +90,10 @@ export function DeviceCard({
   };
 
   const online = device.status === "online";
-  const canControl = device.isOn !== undefined && online;
+  const canControl =
+    online &&
+    (device.isOn !== undefined ||
+      Boolean(device.capabilities?.includes("on_off")));
   const lastUpdated = new Date(device.lastUpdated).toLocaleString("id-ID", {
     day: "numeric",
     month: "short",

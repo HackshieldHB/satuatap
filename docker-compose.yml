@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: satuatap
+      POSTGRES_PASSWORD: satuatap
+      POSTGRES_DB: satuatap
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - satuatap_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U satuatap -d satuatap"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: "3001"
+      DATABASE_URL: postgresql://satuatap:satuatap@postgres:5432/satuatap
+      JWT_SECRET: local-dev-jwt-secret-change-me
+      INTERNAL_API_KEY: local-internal-key
+      GATEWAY_URL: http://iot-gateway:3100
+      CORS_ORIGIN: http://localhost:3000
+      MQTT_URL: mqtt://mosquitto:1883
+
+  iot-gateway:
+    build:
+      context: .
+      dockerfile: apps/iot-gateway/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+      api:
+        condition: service_started
+    ports:
+      - "127.0.0.1:3100:3100"
+    environment:
+      NODE_ENV: development
+      PORT: "3100"
+      DATABASE_URL: postgresql://satuatap:satuatap@postgres:5432/satuatap
+      MQTT_URL: mqtt://mosquitto:1883
+      API_URL: http://api:3001
+      INTERNAL_API_KEY: local-internal-key
+      OFFLINE_AFTER_MS: "45000"
+
+  iot-simulator:
+    build:
+      context: .
+      dockerfile: apps/iot-simulator/Dockerfile
+    depends_on:
+      mosquitto:
+        condition: service_started
+      iot-gateway:
+        condition: service_started
+    environment:
+      MQTT_URL: mqtt://mosquitto:1883
+      HOME_ID: home-1
+      ENERGY_INTERVAL_MS: "5000"
+      WATER_INTERVAL_MS: "5000"
+      ENVIRONMENT_INTERVAL_MS: "10000"
+      MOTION_INTERVAL_MS: "20000"
+      LIGHTING_INTERVAL_MS: "15000"
+
+volumes:
+  satuatap_pg:

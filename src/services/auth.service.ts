@@ -7,6 +7,8 @@ import type {
 } from "@/types";
 import { DEMO_CREDENTIALS, MOCK_USER } from "@/data/mock";
 import { delay } from "@/lib/utils";
+import { useMockData } from "@/lib/config";
+import { apiFetch } from "@/services/http";
 
 const STORAGE_KEY = "huni_session";
 const OTP_CODE = "123456";
@@ -15,6 +17,15 @@ export class AuthService {
   async login(
     credentials: AuthCredentials
   ): Promise<ApiResponse<AuthSession>> {
+    if (!useMockData) {
+      const res = await apiFetch<AuthSession>("/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify(credentials),
+      });
+      if (res.success && res.data) this.saveSession(res.data);
+      return res;
+    }
+
     await delay(800);
 
     const isValid =
