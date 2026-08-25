@@ -23,7 +23,8 @@
     "db:migrate:deploy": "npm run migrate:deploy -w @satu-atap/db",
     "db:seed": "npm run seed -w @satu-atap/db",
     "stack:up": "docker compose up -d postgres mosquitto",
-    "stack:down": "docker compose down"
+    "stack:down": "docker compose down",
+    "mqtt:users": "tsx scripts/mqtt-users.ts"
   },
   "engines": {
     "node": ">=20"
@@ -49,6 +50,7 @@
     "jsdom": "^25.0.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.3",
     "typescript": "^5.7.2",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^2.1.9"

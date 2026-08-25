@@ -18,7 +18,37 @@ export async function buildApp() {
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, { origin: config.corsOrigin, credentials: true });
   await app.register(jwt, { secret: config.jwtSecret });
-  await app.register(rateLimit, { max: 200, timeWindow: "1 minute" });
+  await app.register(rateLimit, {
+    global: true,
+    timeWindow: "1 minute",
+    max: (req) => {
+      const path = req.url.split("?")[0];
+      if (path.startsWith("/v1/auth/")) return 10;
+      if (path.startsWith("/internal/")) return 5000;
+      if (path.startsWith("/v1/")) return 300;
+      return 10_000;
+    },
+    keyGenerator: (req) => {
+      const path = req.url.split("?")[0];
+      if (path.startsWith("/internal/")) {
+        const key = req.headers["x-internal-key"];
+        return `internal:${typeof key === "string" ? key : req.ip}`;
+      }
+      if (path.startsWith("/v1/auth/")) {
+        return `auth:${req.ip}`;
+      }
+      if (path.startsWith("/v1/")) {
+        const auth = req.headers.authorization;
+        return typeof auth === "string" && auth.length > 0 ? `user:${auth}` : `ip:${req.ip}`;
+      }
+      return `other:${req.ip}`;
+    },
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      success: false,
+      error: "Too many requests",
+    }),
+  });
 
   app.addHook("onRequest", async (req) => {
     req.log.info({ msg: "API request", method: req.method, url: req.url });

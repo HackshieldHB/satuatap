@@ -1,12 +1,23 @@
+import { randomBytes } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const MQTT_GENERATED_DIR = path.join(ROOT, "infrastructure", "mosquitto", "generated");
+
+function randomMqttPassword(): string {
+  return randomBytes(18).toString("base64url");
+}
+
 async function main() {
   const passwordHash = await bcrypt.hash("password123", 10);
   const deviceSecretHash = await bcrypt.hash("dev-secret-local-only", 10);
-  const mqttPasswordHash = await bcrypt.hash("mqtt-dev", 10);
+  const mqttPlaintext: Record<string, string> = {};
 
   await prisma.user.upsert({
     where: { email: "kevin.santoso@gmail.com" },
@@ -278,9 +289,16 @@ async function main() {
     await prisma.deviceCapability.createMany({
       data: d.capabilities.map((capability) => ({ deviceId: d.id, capability })),
     });
+    const mqttPassword = randomMqttPassword();
+    mqttPlaintext[d.id] = mqttPassword;
+    const mqttPasswordHash = await bcrypt.hash(mqttPassword, 10);
     await prisma.deviceCredential.upsert({
       where: { deviceId: d.id },
-      update: {},
+      update: {
+        mqttUsername: d.id,
+        mqttPasswordHash,
+        deviceSecretHash,
+      },
       create: {
         deviceId: d.id,
         mqttUsername: d.id,
@@ -349,6 +367,18 @@ async function main() {
     },
   });
   await prisma.automationRule.deleteMany({ where: { id: "auto-motion-living" } });
+
+  await mkdir(MQTT_GENERATED_DIR, { recursive: true });
+  await writeFile(
+    path.join(MQTT_GENERATED_DIR, "dev-passwords.json"),
+    JSON.stringify(mqttPlaintext, null, 2) + "\n",
+    "utf8"
+  );
+
+  console.log("MQTT device credentials (shown once; hashes only are stored):");
+  for (const d of devices) {
+    console.log(`  ${d.id}  username=${d.id}  password=${mqttPlaintext[d.id]}`);
+  }
 
   console.log("Seed complete: user-1 / home-1 / 12 Phase 1 devices");
 }

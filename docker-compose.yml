@@ -21,6 +21,7 @@ services:
       - "127.0.0.1:1883:1883"
     volumes:
       - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infrastructure/mosquitto/generated:/mosquitto/config/auth:ro
 
   api:
     build:
@@ -40,6 +41,8 @@ services:
       GATEWAY_URL: http://iot-gateway:3100
       CORS_ORIGIN: http://localhost:3000
       MQTT_URL: mqtt://mosquitto:1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-gateway}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-local-dev-mqtt-gateway}
 
   iot-gateway:
     build:
@@ -59,6 +62,8 @@ services:
       PORT: "3100"
       DATABASE_URL: postgresql://satuatap:satuatap@postgres:5432/satuatap
       MQTT_URL: mqtt://mosquitto:1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-gateway}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-local-dev-mqtt-gateway}
       API_URL: http://api:3001
       INTERNAL_API_KEY: local-internal-key
       OFFLINE_AFTER_MS: "45000"
@@ -74,6 +79,8 @@ services:
         condition: service_started
     environment:
       MQTT_URL: mqtt://mosquitto:1883
+      MQTT_USERNAME: simulator
+      MQTT_PASSWORD: ${MQTT_SIMULATOR_PASSWORD:-local-dev-mqtt-simulator}
       HOME_ID: home-1
       ENERGY_INTERVAL_MS: "5000"
       WATER_INTERVAL_MS: "5000"

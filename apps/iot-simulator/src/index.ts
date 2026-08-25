@@ -11,7 +11,19 @@ import {
 } from "@satu-atap/shared";
 
 const MQTT_URL = process.env.MQTT_URL ?? "mqtt://127.0.0.1:1883";
+const MQTT_USERNAME = process.env.MQTT_USERNAME ?? "simulator";
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD ?? "local-dev-mqtt-simulator";
 const HOME_ID = process.env.HOME_ID ?? "home-1";
+
+function isMqttAuthRejection(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("not authorized") ||
+    msg.includes("bad username or password") ||
+    msg.includes("bad user name or password") ||
+    /\bconnack\b.*\b5\b/.test(msg)
+  );
+}
 const ENERGY_MS = Number(process.env.ENERGY_INTERVAL_MS ?? 5000);
 const WATER_MS = Number(process.env.WATER_INTERVAL_MS ?? 5000);
 const ENV_MS = Number(process.env.ENVIRONMENT_INTERVAL_MS ?? 10000);
@@ -95,8 +107,12 @@ function energyMetrics(kwh: number) {
 }
 
 function connectNode(nodeId: string, deviceIds: readonly string[]) {
+  let authRejected = false;
   const client = mqtt.connect(MQTT_URL, {
     clientId: `satuatap-sim-${nodeId}-${process.pid}`,
+    username: MQTT_USERNAME,
+    password: MQTT_PASSWORD,
+    reconnectPeriod: 2000,
     will: {
       topic: nodeAvailabilityTopic(HOME_ID, nodeId),
       payload: JSON.stringify({ status: "offline" }),
@@ -105,6 +121,10 @@ function connectNode(nodeId: string, deviceIds: readonly string[]) {
     },
   });
   for (const id of deviceIds) deviceClient.set(id, client);
+
+  client.on("reconnect", () => {
+    if (authRejected) client.end(true);
+  });
 
   client.on("connect", () => {
     console.log(JSON.stringify({ msg: "Simulator MQTT connected", nodeId }));
@@ -136,6 +156,19 @@ function connectNode(nodeId: string, deviceIds: readonly string[]) {
   });
 
   client.on("error", (err) => {
+    if (isMqttAuthRejection(err)) {
+      authRejected = true;
+      console.error(
+        JSON.stringify({
+          msg: "Simulator MQTT authentication rejected; not retrying",
+          nodeId,
+          error: err.message,
+        })
+      );
+      client.end(true);
+      process.exitCode = 1;
+      return;
+    }
     console.error(JSON.stringify({ msg: "Simulator MQTT error", nodeId, error: err.message }));
   });
 }
