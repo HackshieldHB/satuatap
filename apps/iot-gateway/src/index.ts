@@ -2,13 +2,19 @@ import mqtt from "mqtt";
 import Fastify from "fastify";
 import {
   MQTT_WILDCARD_ACK,
-  MQTT_WILDCARD_STATUS,
+  MQTT_WILDCARD_COMMAND,
+  MQTT_WILDCARD_EVENT,
+  MQTT_WILDCARD_NODE_AVAILABILITY,
+  MQTT_WILDCARD_STATE,
   MQTT_WILDCARD_TELEMETRY,
   mqttTopic,
+  nodeAvailabilityTopic,
   parseMqttTopic,
   telemetryPayloadSchema,
-  deviceStatusPayloadSchema,
+  statePayloadSchema,
   ackPayloadSchema,
+  eventPayloadSchema,
+  availabilityPayloadSchema,
   commandPayloadSchema,
 } from "@satu-atap/shared";
 
@@ -16,21 +22,22 @@ const MQTT_URL = process.env.MQTT_URL ?? "mqtt://127.0.0.1:1883";
 const API_URL = process.env.API_URL ?? "http://127.0.0.1:3001";
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY ?? "local-internal-key";
 const PORT = Number(process.env.PORT ?? 3100);
+const HOME_ID = process.env.HOME_ID ?? "home-1";
 
 let mqttReady = false;
 const client = mqtt.connect(MQTT_URL, {
   clientId: `satuatap-gateway-${process.pid}`,
   reconnectPeriod: 2000,
   will: {
-    topic: "satuatap/gateway/status",
+    topic: nodeAvailabilityTopic(HOME_ID, "gateway"),
     payload: JSON.stringify({ status: "offline" }),
     qos: 1,
-    retain: false,
+    retain: true,
   },
 });
 
-function log(msg: string, extra?: Record<string, unknown>) {
-  console.log(JSON.stringify({ msg, ...extra, ts: new Date().toISOString() }));
+function log(level: "info" | "warn", msg: string, extra?: Record<string, unknown>) {
+  console.log(JSON.stringify({ level, msg, ...extra, ts: new Date().toISOString() }));
 }
 
 async function apiPost(path: string, body: unknown) {
@@ -46,22 +53,34 @@ async function apiPost(path: string, body: unknown) {
 
 client.on("connect", () => {
   mqttReady = true;
-  log("MQTT connected");
+  log("info", "MQTT connected");
+  client.publish(
+    nodeAvailabilityTopic(HOME_ID, "gateway"),
+    JSON.stringify({ status: "online", firmware: "gateway-1.0.0" }),
+    { qos: 1, retain: true }
+  );
   client.subscribe(
-    [MQTT_WILDCARD_TELEMETRY, MQTT_WILDCARD_STATUS, MQTT_WILDCARD_ACK],
+    [
+      MQTT_WILDCARD_TELEMETRY,
+      MQTT_WILDCARD_STATE,
+      MQTT_WILDCARD_COMMAND,
+      MQTT_WILDCARD_ACK,
+      MQTT_WILDCARD_EVENT,
+      MQTT_WILDCARD_NODE_AVAILABILITY,
+    ],
     { qos: 1 },
     (err) => {
-      if (err) log("MQTT subscribe error", { error: err.message });
+      if (err) log("warn", "MQTT subscribe error", { error: err.message });
     }
   );
 });
 
-client.on("reconnect", () => log("MQTT reconnecting"));
+client.on("reconnect", () => log("info", "MQTT reconnecting"));
 client.on("close", () => {
   mqttReady = false;
-  log("MQTT disconnected");
+  log("info", "MQTT disconnected");
 });
-client.on("error", (err) => log("MQTT error", { error: err.message }));
+client.on("error", (err) => log("warn", "MQTT error", { error: err.message }));
 
 client.on("message", async (topic, payload) => {
   const parsedTopic = parseMqttTopic(topic);
@@ -70,7 +89,23 @@ client.on("message", async (topic, payload) => {
   try {
     json = JSON.parse(payload.toString());
   } catch {
-    log("Telemetry rejected", { reason: "invalid_json", topic });
+    log("warn", "Payload rejected", { reason: "invalid_json", topic });
+    return;
+  }
+
+  if (parsedTopic.kind === "node") {
+    if (parsedTopic.nodeId === "gateway") return;
+    const ok = availabilityPayloadSchema.safeParse(json);
+    if (!ok.success) {
+      log("warn", "Availability rejected", { nodeId: parsedTopic.nodeId, reason: "schema" });
+      return;
+    }
+    const res = await apiPost("/internal/availability", {
+      homeId: parsedTopic.homeId,
+      nodeId: parsedTopic.nodeId,
+      payload: ok.data,
+    });
+    if (!res.ok) log("warn", "Availability persist failed", { nodeId: parsedTopic.nodeId, status: res.status });
     return;
   }
 
@@ -79,35 +114,58 @@ client.on("message", async (topic, payload) => {
   if (channel === "telemetry") {
     const ok = telemetryPayloadSchema.safeParse(json);
     if (!ok.success) {
-      log("Telemetry rejected", { deviceId, reason: "schema" });
+      log("warn", "Telemetry rejected", { deviceId, reason: "schema" });
       return;
     }
     const res = await apiPost("/internal/telemetry", {
       homeId,
       deviceId,
+      source: "telemetry",
       payload: ok.data,
     });
-    if (!res.ok) log("Telemetry persist failed", { deviceId, status: res.status });
+    if (!res.ok) log("warn", "Telemetry persist failed", { deviceId, status: res.status });
     return;
   }
 
-  if (channel === "status") {
-    const ok = deviceStatusPayloadSchema.safeParse(json);
+  if (channel === "state") {
+    const ok = statePayloadSchema.safeParse(json);
     if (!ok.success) {
-      log("Status rejected", { deviceId });
+      log("warn", "State rejected", { deviceId, reason: "schema" });
       return;
     }
-    await apiPost("/internal/status", { homeId, deviceId, payload: ok.data });
+    const res = await apiPost("/internal/telemetry", {
+      homeId,
+      deviceId,
+      source: "state",
+      payload: ok.data,
+    });
+    if (!res.ok) log("warn", "State persist failed", { deviceId, status: res.status });
+    return;
+  }
+
+  if (channel === "event") {
+    const ok = eventPayloadSchema.safeParse(json);
+    if (!ok.success) {
+      log("warn", "Event rejected", { deviceId, reason: "schema" });
+      return;
+    }
+    const res = await apiPost("/internal/event", { homeId, deviceId, payload: ok.data });
+    if (!res.ok) log("warn", "Event persist failed", { deviceId, status: res.status });
     return;
   }
 
   if (channel === "ack") {
     const ok = ackPayloadSchema.safeParse(json);
     if (!ok.success) {
-      log("ACK rejected", { deviceId });
+      log("warn", "ACK rejected", { deviceId, reason: "schema" });
       return;
     }
     await apiPost("/internal/ack", ok.data);
+    return;
+  }
+
+  if (channel === "command") {
+    log("warn", "Inbound command ignored", { deviceId, topic });
   }
 });
 
@@ -134,7 +192,7 @@ async function publishCommand(commandId: string) {
     params: target.params ?? {},
     idempotencyKey: target.idempotencyKey,
   });
-  const topic = mqttTopic(target.homeId, target.deviceId, "cmd");
+  const topic = mqttTopic(target.homeId, target.deviceId, "command");
   await new Promise<void>((resolve, reject) => {
     client.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => {
       if (err) reject(err);
@@ -142,7 +200,7 @@ async function publishCommand(commandId: string) {
     });
   });
   await apiPost(`/internal/commands/${target.id}/sent`, {});
-  log("Command sent", { commandId: target.id, topic });
+  log("info", "Command sent", { commandId: target.id, topic });
 }
 
 async function pollPending() {
@@ -181,4 +239,4 @@ http.post("/internal/publish-command", async (req, reply) => {
 });
 
 await http.listen({ port: PORT, host: "0.0.0.0" });
-log("Gateway HTTP listening", { port: PORT });
+log("info", "Gateway HTTP listening", { port: PORT });

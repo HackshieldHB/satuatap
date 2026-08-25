@@ -9,11 +9,18 @@ import {
   loginBodySchema,
   ackPayloadSchema,
   telemetryPayloadSchema,
+  eventPayloadSchema,
+  availabilityPayloadSchema,
   deviceStatusPayloadSchema,
   type DeviceTypeId,
 } from "@satu-atap/shared";
 import { authenticate, requireHomeRole, requireInternalKey, audit } from "./auth.js";
-import { ingestTelemetry, applyDeviceStatus } from "./ingest.js";
+import {
+  ingestTelemetry,
+  applyDeviceStatus,
+  ingestDeviceEvent,
+  applyNodeAvailability,
+} from "./ingest.js";
 import { createCommand } from "./automation.js";
 import { hub, type AppEvent } from "./events.js";
 import { mapHome, mapRoom, mapDeviceForUi } from "./mappers.js";
@@ -724,7 +731,12 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post("/internal/telemetry", async (req, reply) => {
     requireInternalKey(req, reply);
     if (reply.sent) return;
-    const body = req.body as { homeId: string; deviceId: string; payload: unknown };
+    const body = req.body as {
+      homeId: string;
+      deviceId: string;
+      payload: unknown;
+      source?: "telemetry" | "state";
+    };
     const parsed = telemetryPayloadSchema.safeParse(body.payload);
     if (!parsed.success) {
       req.log.warn({ msg: "Telemetry rejected", issues: parsed.error.flatten() });
@@ -735,10 +747,52 @@ export async function registerRoutes(app: FastifyInstance) {
       deviceId: body.deviceId,
       recordedAt: new Date(parsed.data.ts),
       metrics: parsed.data.metrics,
+      source: body.source === "state" ? "state" : "telemetry",
     });
     if (!result.ok) return reply.code(404).send({ success: false, error: result.error });
     req.log.info({ msg: "Telemetry received", deviceId: body.deviceId });
     return { success: true, data: { id: result.id } };
+  });
+
+  app.post("/internal/event", async (req, reply) => {
+    requireInternalKey(req, reply);
+    if (reply.sent) return;
+    const body = req.body as { homeId: string; deviceId: string; payload: unknown };
+    const parsed = eventPayloadSchema.safeParse(body.payload);
+    if (!parsed.success) {
+      req.log.warn({ msg: "Event rejected", issues: parsed.error.flatten() });
+      return reply.code(400).send({ success: false, error: "invalid_event" });
+    }
+    const result = await ingestDeviceEvent({
+      homeId: body.homeId,
+      deviceId: body.deviceId,
+      ts: new Date(parsed.data.ts),
+      event: parsed.data.event,
+      data: parsed.data.data,
+    });
+    if (!result.ok) return reply.code(404).send({ success: false, error: result.error });
+    return { success: true };
+  });
+
+  app.post("/internal/availability", async (req, reply) => {
+    requireInternalKey(req, reply);
+    if (reply.sent) return;
+    const body = req.body as { homeId: string; nodeId: string; payload: unknown };
+    const parsed = availabilityPayloadSchema.safeParse(body.payload);
+    if (!parsed.success) {
+      req.log.warn({ msg: "Availability rejected", issues: parsed.error.flatten() });
+      return reply.code(400).send({ success: false, error: "invalid_availability" });
+    }
+    const result = await applyNodeAvailability({
+      homeId: body.homeId,
+      nodeId: body.nodeId,
+      status: parsed.data.status,
+      ip: parsed.data.ip,
+      firmware: parsed.data.firmware,
+      rssi: parsed.data.rssi,
+    });
+    if (!result.ok) return reply.code(404).send({ success: false, error: result.error });
+    return { success: true, data: { deviceCount: result.deviceCount } };
   });
 
   app.post("/internal/status", async (req, reply) => {

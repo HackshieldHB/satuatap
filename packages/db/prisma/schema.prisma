@@ -188,9 +188,12 @@ model Device {
   firmwareModel   String?
   firmwareVersion String?
   hardwareVersion String?
+  nodeId          String?
   claimToken      String?
   isOn            Boolean?
   createdAt       DateTime           @default(now())
+
+  @@index([nodeId])
 
   capabilities DeviceCapability[]
   credential   DeviceCredential?

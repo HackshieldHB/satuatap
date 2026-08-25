@@ -24,6 +24,7 @@ describe("mqtt topics", () => {
   it("round-trips home and device ids", () => {
     const t = mqttTopic("home-1", "dev-energy", "telemetry");
     expect(parseMqttTopic(t)).toEqual({
+      kind: "device",
       homeId: "home-1",
       deviceId: "dev-energy",
       channel: "telemetry",

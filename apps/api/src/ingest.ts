@@ -28,6 +28,7 @@ export async function ingestTelemetry(input: {
   deviceId: string;
   recordedAt: Date;
   metrics: Record<string, unknown>;
+  source?: "telemetry" | "state";
 }) {
   const device = await prisma.device.findFirst({
     where: { id: input.deviceId, homeId: input.homeId },
@@ -91,7 +92,7 @@ export async function ingestTelemetry(input: {
   await upsertHourlyAggregates(input);
 
   hub.publish({
-    event: "DEVICE_TELEMETRY_UPDATED",
+    event: input.source === "state" ? "DEVICE_STATE_UPDATED" : "DEVICE_TELEMETRY_UPDATED",
     homeId: input.homeId,
     deviceId: input.deviceId,
     data: input.metrics,
@@ -177,6 +178,7 @@ export async function applyDeviceStatus(input: {
   ip?: string;
   firmware?: string;
   rssi?: number;
+  raiseAlert?: boolean;
 }) {
   const device = await prisma.device.findFirst({
     where: { id: input.deviceId, homeId: input.homeId },
@@ -200,7 +202,7 @@ export async function applyDeviceStatus(input: {
     });
   }
 
-  if (input.status === "offline") {
+  if (input.status === "offline" && input.raiseAlert !== false) {
     await prisma.alert.create({
       data: {
         homeId: input.homeId,
@@ -230,4 +232,105 @@ export async function applyDeviceStatus(input: {
   );
 
   return { ok: true as const };
+}
+
+export async function ingestDeviceEvent(input: {
+  homeId: string;
+  deviceId: string;
+  ts: Date;
+  event: "MOTION_DETECTED" | "MOTION_CLEARED" | "BUTTON_PRESSED" | "SENSOR_ERROR";
+  data?: Record<string, unknown>;
+}) {
+  const device = await prisma.device.findFirst({
+    where: { id: input.deviceId, homeId: input.homeId },
+  });
+  if (!device) return { ok: false as const, error: "unknown_device" };
+
+  if (input.event === "MOTION_DETECTED" || input.event === "MOTION_CLEARED") {
+    await prisma.motionEvent.create({
+      data: {
+        homeId: input.homeId,
+        deviceId: input.deviceId,
+        kind: input.event,
+        occurredAt: input.ts,
+      },
+    });
+  }
+
+  await prisma.device.update({
+    where: { id: input.deviceId },
+    data: { lastSeen: input.ts, lastHeartbeat: input.ts, status: "online" },
+  });
+
+  hub.publish({
+    event: "DEVICE_EVENT",
+    homeId: input.homeId,
+    deviceId: input.deviceId,
+    data: { event: input.event, ...(input.data ?? {}) },
+    ts: input.ts.toISOString(),
+  });
+
+  if (input.event === "MOTION_DETECTED") {
+    await evaluateAutomations({
+      homeId: input.homeId,
+      type: "MOTION_DETECTED",
+      deviceId: input.deviceId,
+      metrics: input.data,
+    });
+  }
+
+  return { ok: true as const };
+}
+
+export async function applyNodeAvailability(input: {
+  homeId: string;
+  nodeId: string;
+  status: "online" | "offline" | "unknown";
+  ip?: string;
+  firmware?: string;
+  rssi?: number;
+}) {
+  const devices = await prisma.device.findMany({
+    where: { homeId: input.homeId, nodeId: input.nodeId },
+  });
+  if (devices.length === 0) return { ok: false as const, error: "unknown_node" };
+
+  const transitioningOffline =
+    input.status === "offline" && devices.some((d) => d.status !== "offline");
+
+  for (const device of devices) {
+    await applyDeviceStatus({
+      homeId: input.homeId,
+      deviceId: device.id,
+      status: input.status,
+      ip: input.ip,
+      firmware: input.firmware,
+      rssi: input.rssi,
+      raiseAlert: false,
+    });
+  }
+
+  if (transitioningOffline) {
+    const representative = devices[0];
+    await prisma.alert.create({
+      data: {
+        homeId: input.homeId,
+        deviceId: representative.id,
+        roomId: representative.roomId,
+        severity: "warning",
+        type: "DEVICE_OFFLINE",
+        title: "Node offline",
+        message: `Node ${input.nodeId} tidak merespons (${devices.length} perangkat).`,
+      },
+    });
+  }
+
+  hub.publish({
+    event: "NODE_AVAILABILITY_UPDATED",
+    homeId: input.homeId,
+    data: { nodeId: input.nodeId, status: input.status, deviceCount: devices.length },
+    ts: new Date().toISOString(),
+  });
+
+  return { ok: true as const, deviceCount: devices.length };
 }

@@ -28,6 +28,31 @@ export const telemetryPayloadSchema = z.object({
   metrics: telemetryMetricsSchema,
 });
 
+export const statePayloadSchema = telemetryPayloadSchema;
+
+export const eventPayloadSchema = z.object({
+  ts: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "invalid timestamp"),
+  event: z.enum([
+    "MOTION_DETECTED",
+    "MOTION_CLEARED",
+    "BUTTON_PRESSED",
+    "SENSOR_ERROR",
+  ]),
+  data: z.record(z.unknown()).optional(),
+});
+
+export const availabilityPayloadSchema = z.object({
+  status: z.enum(["online", "offline", "unknown"]),
+  firmware: z.string().optional(),
+  build: z.number().optional(),
+  ip: z.string().optional(),
+  mac: z
+    .string()
+    .regex(/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/)
+    .optional(),
+  rssi: z.number().optional(),
+});
+
 export const deviceStatusPayloadSchema = z.object({
   status: z.enum(["online", "offline", "unknown"]),
   ip: z.string().optional(),
