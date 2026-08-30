@@ -38,25 +38,20 @@
 #include <PubSubClient.h>
 #include <PZEM004Tv30.h>
 #include <time.h>
+#include "arduino_secrets.h"   // di-gitignore; salin dari arduino_secrets.h.example
 
 // ---------------------------------------------------------------------------
-// ISI BAGIAN INI
+// Kredensial di arduino_secrets.h (TIDAK masuk git). WIFI/MQTT_HOST berubah tiap
+// ganti jaringan — cek IP host sebelum tiap flash (rc=-2 kalau basi).
 // ---------------------------------------------------------------------------
 
-// SSID 2.4 GHz — ESP32 tidak bisa 5 GHz.
-const char* WIFI_SSID     = "ThunderElite";
-const char* WIFI_PASSWORD = "Kontrakan7878";
+const char* WIFI_SSID     = SECRET_WIFI_SSID;
+const char* WIFI_PASSWORD = SECRET_WIFI_PASSWORD;
+const char* MQTT_HOST     = SECRET_MQTT_HOST;
 
-// IP antarmuka Wi-Fi laptop/Pi yang menjalankan broker Mosquitto.
-// PERIKSA SEBELUM SETIAP FLASH — berubah tiap ganti jaringan. Kalau basi, ESP32
-// konek Wi-Fi normal tapi gagal ke broker dengan rc=-2. Cek cepat: setup.bat
-// mencetaknya, atau `ipconfig`.
-const char* MQTT_HOST     = "192.168.1.5";
-
-// Akun NODE (bukan device). Password dari .secrets/mqtt-dev-passwords.json,
-// kunci "esp32-energy-001".
+// Akun NODE (bukan device). Username = nodeId; password node dari .secrets.
 const char* MQTT_USERNAME = "esp32-energy-001";
-const char* MQTT_PASSWORD = "GANTI-DENGAN-PASSWORD-NODE-DARI-SECRETS";
+const char* MQTT_PASSWORD = SECRET_MQTT_PASSWORD;
 
 // ---------------------------------------------------------------------------
 

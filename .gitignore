@@ -62,3 +62,7 @@ infrastructure/mosquitto/generated/
 
 firmware/secrets/
 
+# Per-sketch Arduino credentials (WiFi + node MQTT password). Commit only the
+# .example template. Never the real arduino_secrets.h.
+firmware/**/arduino_secrets.h
+

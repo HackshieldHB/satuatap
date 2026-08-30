@@ -51,9 +51,9 @@ All GND common. AC side (L/N + CT coil) per the PZEM manual.
 
 1. Arduino IDE → Library Manager: install **PubSubClient** (Nick O'Leary) and
    **PZEM004Tv30** (Jakub Mandula). Board: **ESP32 Dev Module**.
-2. Fill the config block at the top of the sketch: `WIFI_SSID`, `WIFI_PASSWORD`,
-   `MQTT_HOST` (the laptop/Pi LAN IP — `setup.bat` prints it), and `MQTT_PASSWORD`
-   (the node password from `.secrets`).
+2. Copy `arduino_secrets.h.example` → `arduino_secrets.h` (gitignored) and fill it:
+   `SECRET_WIFI_*`, `SECRET_MQTT_HOST` (the laptop/Pi LAN IP — `setup.bat` prints it),
+   and `SECRET_MQTT_PASSWORD` (the node password from `.secrets`, key `esp32-energy-001`).
 3. Ensure the stack is up (`setup.bat`) and the **simulator is OFF** for these two
    devices (else the fake `energy-main`/`energy-ac` counters collide with the board).
 4. Upload, open Serial Monitor at 115200. Expect `[mqtt] ... OK`, then per-cycle
