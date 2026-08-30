@@ -259,6 +259,24 @@ async function main() {
     users.push({ username: row.mqttUsername, password });
   }
 
+  // One passwd entry per physical node. buildAclFile derives each node's ACL from the
+  // devices it hosts; here we just make the node account authenticable.
+  const nodeCredentials = await prisma.nodeCredential.findMany();
+  for (const node of nodeCredentials) {
+    const password = plaintext[node.nodeId];
+    if (!password) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          msg: "Missing plaintext MQTT password for node; re-run db:seed",
+          nodeId: node.nodeId,
+        })
+      );
+      continue;
+    }
+    users.push({ username: node.mqttUsername, password });
+  }
+
   users.push({ username: gatewayUsername, password: gatewayPassword });
   users.push({ username: simulatorUsername, password: simulatorPassword });
 

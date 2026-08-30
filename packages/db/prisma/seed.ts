@@ -407,14 +407,33 @@ async function main() {
     }
   }
 
+  // One MQTT account per physical node. Real multi-device firmware authenticates
+  // once per board with this, instead of once per logical device (see NodeCredential).
+  const nodes = new Map<string, string>(); // nodeId -> homeId
+  for (const d of devices) nodes.set(d.nodeId, d.homeId);
+  for (const [nodeId, nodeHomeId] of nodes) {
+    const nodePassword = randomMqttPassword();
+    mqttPlaintext[nodeId] = nodePassword;
+    const mqttPasswordHash = await bcrypt.hash(nodePassword, 10);
+    await prisma.nodeCredential.upsert({
+      where: { nodeId },
+      update: { homeId: nodeHomeId, mqttUsername: nodeId, mqttPasswordHash },
+      create: { nodeId, homeId: nodeHomeId, mqttUsername: nodeId, mqttPasswordHash },
+    });
+  }
+
   await writeDevPasswords(mqttPlaintext);
 
   console.log("MQTT device credentials (shown once; hashes only are stored):");
   for (const d of devices) {
     console.log(`  ${d.id}  username=${d.id}  password=${mqttPlaintext[d.id]}`);
   }
+  console.log("MQTT node credentials (one per physical board — use these in firmware):");
+  for (const nodeId of nodes.keys()) {
+    console.log(`  ${nodeId}  username=${nodeId}  password=${mqttPlaintext[nodeId]}`);
+  }
 
-  console.log("Seed complete: user-1 / home-1 / 12 Phase 1 devices");
+  console.log("Seed complete: user-1 / home-1 / 12 Phase 1 devices / 3 nodes");
 }
 
 main()

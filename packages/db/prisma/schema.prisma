@@ -239,6 +239,17 @@ model DeviceCredential {
   deviceSecretHash String
 }
 
+// One physical ESP32 board. Real multi-device firmware authenticates once per board
+// with this credential (ACL scoped to exactly the devices it hosts) instead of once
+// per logical device. nodeId is the MQTT username. No FK: nodes are identified by the
+// nodeId string on Device, not a Node table.
+model NodeCredential {
+  nodeId           String @id
+  homeId           String
+  mqttUsername     String @unique
+  mqttPasswordHash String
+}
+
 model Sensor {
   id       String @id @default(cuid())
   deviceId String

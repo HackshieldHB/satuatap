@@ -50,6 +50,27 @@ describe("MQTT ACL policy", () => {
     ).toBe(true);
   });
 
+  it("lets a node account act for its own devices and not another node's", () => {
+    // A node account (one physical board) writes telemetry for every device it hosts...
+    expect(
+      aclAllows(acl, "esp32-energy-001", "write", "home/home-1/device/energy-main/telemetry")
+    ).toBe(true);
+    expect(
+      aclAllows(acl, "esp32-energy-001", "read", "home/home-1/device/energy-main/command")
+    ).toBe(true);
+    expect(
+      aclAllows(acl, "esp32-energy-001", "write", "home/home-1/node/esp32-energy-001/availability")
+    ).toBe(true);
+    // ...but never for a device on a different board.
+    expect(
+      aclAllows(acl, "esp32-energy-001", "write", "home/home-1/device/light-living-room/telemetry")
+    ).toBe(false);
+    // A node account still cannot publish onto a command topic (only read it).
+    expect(
+      aclAllows(acl, "esp32-energy-001", "write", "home/home-1/device/energy-main/command")
+    ).toBe(false);
+  });
+
   it("lets the gateway write commands and not device telemetry", () => {
     expect(
       aclAllows(acl, "gateway", "write", "home/home-1/device/light-living-room/command")
