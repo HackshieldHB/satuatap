@@ -18,7 +18,7 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     ports:
-      - "127.0.0.1:1883:1883"
+      - "1883:1883"
     volumes:
       - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./infrastructure/mosquitto/generated:/mosquitto/config/auth:ro
@@ -96,3 +96,4 @@ services:
 volumes:
   satuatap_pg:
   edge_db:
+
