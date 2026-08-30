@@ -12,6 +12,7 @@ import { apiFetch } from "@/services/http";
 
 const STORAGE_KEY = "huni_session";
 const OTP_CODE = "123456";
+const MOCK_TOKEN = "mock-jwt-token";
 
 export class AuthService {
   async login(
@@ -41,7 +42,7 @@ export class AuthService {
 
     const session: AuthSession = {
       user: MOCK_USER,
-      token: "mock-jwt-token",
+      token: MOCK_TOKEN,
       onboardingCompleted: this.getStoredSession()?.onboardingCompleted ?? true,
       selectedHomeId: "home-1",
     };
@@ -88,7 +89,7 @@ export class AuthService {
             createdAt: new Date().toISOString(),
           }
         : MOCK_USER,
-      token: "mock-jwt-token",
+      token: MOCK_TOKEN,
       onboardingCompleted: false,
     };
 
@@ -148,7 +149,16 @@ export class AuthService {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as AuthSession;
+      const session = JSON.parse(raw) as AuthSession;
+      // A session minted in mock mode carries a fake token the real API always
+      // rejects with 401. Switching NEXT_PUBLIC_ENABLE_MOCK_DATA to false does
+      // not clear it, so the app would sit "logged in" yet every request fails
+      // and the dashboard loads forever. Drop it and force a real re-login.
+      if (!useMockData && session.token === MOCK_TOKEN) {
+        localStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
+      return session;
     } catch {
       return null;
     }
