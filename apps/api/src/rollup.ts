@@ -1,6 +1,10 @@
 import { prisma, type AggregatePeriod } from "@satu-atap/db";
 import { COUNTER_METRICS } from "@satu-atap/shared";
 
+/** Hourly job; lookback is slightly wider so readings between ticks are not skipped. */
+export const DEFAULT_ROLLUP_LOOKBACK_MS = 75 * 60 * 1000;
+export const DEFAULT_CATCH_UP_CAP = 60;
+
 function utcDay(d: Date): Date {
   const x = new Date(d);
   x.setUTCHours(0, 0, 0, 0);
@@ -37,24 +41,51 @@ function isCounterMetric(metric: string): boolean {
   return (COUNTER_METRICS as readonly string[]).includes(metric);
 }
 
-function isInstantMetric(metric: string): boolean {
-  return (INSTANT_METRICS as readonly string[]).includes(metric);
-}
+export type PeriodKind = "day" | "week" | "month";
 
-export function periodWindow(
-  period: "day" | "week" | "month",
-  at: Date
-): { start: Date; end: Date } {
+export type RollupWindow = {
+  period: PeriodKind;
+  start: Date;
+  end: Date;
+};
+
+export type RollupNowOptions = {
+  lookbackMs?: number;
+  catchUpCap?: number;
+};
+
+export type RollupNowResult = {
+  catchUpDays: Date[];
+  catchUpCapped: boolean;
+  windows: RollupWindow[];
+};
+
+export function periodWindow(period: PeriodKind, at: Date): RollupWindow {
   if (period === "day") {
     const start = utcDay(at);
-    return { start, end: addDays(start, 1) };
+    return { period, start, end: addDays(start, 1) };
   }
   if (period === "week") {
     const start = utcWeekStart(at);
-    return { start, end: addDays(start, 7) };
+    return { period, start, end: addDays(start, 7) };
   }
   const start = utcMonthStart(at);
-  return { start, end: nextMonth(start) };
+  return { period, start, end: nextMonth(start) };
+}
+
+function windowKey(w: RollupWindow): string {
+  return `${w.period}:${w.start.toISOString()}`;
+}
+
+function currentAndPreviousWindows(at: Date): RollupWindow[] {
+  return [
+    periodWindow("day", at),
+    periodWindow("day", addDays(utcDay(at), -1)),
+    periodWindow("week", at),
+    periodWindow("week", addDays(utcWeekStart(at), -7)),
+    periodWindow("month", at),
+    periodWindow("month", new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - 1, 1))),
+  ];
 }
 
 export async function rollupRange(
@@ -126,18 +157,84 @@ export async function rollupRange(
   }
 }
 
-export async function rollupNow(at = new Date()) {
-  const day = periodWindow("day", at);
-  const prevDay = periodWindow("day", addDays(utcDay(at), -1));
-  const week = periodWindow("week", at);
-  const prevWeek = periodWindow("week", addDays(utcWeekStart(at), -7));
-  const month = periodWindow("month", at);
-  const prevMonth = periodWindow("month", new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - 1, 1)));
+async function distinctUtcDaysFromRecentIngest(since: Date, until: Date): Promise<Date[]> {
+  const rows = await prisma.telemetryReading.findMany({
+    where: { createdAt: { gte: since, lte: until } },
+    select: { recordedAt: true },
+  });
+  const days = new Map<number, Date>();
+  for (const row of rows) {
+    const day = utcDay(row.recordedAt);
+    days.set(day.getTime(), day);
+  }
+  return [...days.values()].sort((a, b) => a.getTime() - b.getTime());
+}
 
-  await rollupRange("day", day.start, day.end);
-  await rollupRange("day", prevDay.start, prevDay.end);
-  await rollupRange("week", week.start, week.end);
-  await rollupRange("week", prevWeek.start, prevWeek.end);
-  await rollupRange("month", month.start, month.end);
-  await rollupRange("month", prevMonth.start, prevMonth.end);
+function catchUpWindowsForDays(
+  days: Date[],
+  coveredKeys: Set<string>,
+  cap: number
+): { windows: RollupWindow[]; usedDays: Date[]; capped: boolean } {
+  const windows: RollupWindow[] = [];
+  const seen = new Set<string>();
+  const usedDays: Date[] = [];
+  let capped = false;
+
+  for (const day of days) {
+    if (coveredKeys.has(windowKey(periodWindow("day", day)))) {
+      continue;
+    }
+    const candidates = [
+      periodWindow("day", day),
+      periodWindow("week", day),
+      periodWindow("month", day),
+    ];
+    const fresh = candidates.filter((w) => !seen.has(windowKey(w)));
+    if (windows.length + fresh.length > cap) {
+      capped = true;
+      break;
+    }
+    for (const w of fresh) {
+      seen.add(windowKey(w));
+      windows.push(w);
+    }
+    usedDays.push(day);
+  }
+
+  return { windows, usedDays, capped };
+}
+
+export async function rollupNow(at = new Date(), options: RollupNowOptions = {}): Promise<RollupNowResult> {
+  const lookbackMs = options.lookbackMs ?? DEFAULT_ROLLUP_LOOKBACK_MS;
+  const catchUpCap = options.catchUpCap ?? DEFAULT_CATCH_UP_CAP;
+  const since = new Date(at.getTime() - lookbackMs);
+
+  const currentPrev = currentAndPreviousWindows(at);
+  const coveredKeys = new Set(currentPrev.map(windowKey));
+
+  const backlogDays = await distinctUtcDaysFromRecentIngest(since, at);
+  const catchUp = catchUpWindowsForDays(backlogDays, coveredKeys, catchUpCap);
+
+  if (catchUp.capped) {
+    console.warn(
+      JSON.stringify({
+        msg: "Rollup catch-up cap reached",
+        cap: catchUpCap,
+        catchUpDays: catchUp.usedDays.length,
+        omittedDays: backlogDays.filter((d) => !coveredKeys.has(windowKey(periodWindow("day", d)))).length -
+          catchUp.usedDays.length,
+      })
+    );
+  }
+
+  const windows = [...catchUp.windows, ...currentPrev];
+  for (const w of windows) {
+    await rollupRange(w.period, w.start, w.end);
+  }
+
+  return {
+    catchUpDays: catchUp.usedDays,
+    catchUpCapped: catchUp.capped,
+    windows,
+  };
 }

@@ -259,14 +259,16 @@ model TelemetryReading {
 
   @@unique([deviceId, recordedAt])
   @@index([homeId, recordedAt])
+  @@index([createdAt])
 }
 
 model DeviceCounterSnapshot {
-  deviceId  String
-  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  metric    String
-  value     Float
-  updatedAt DateTime @updatedAt
+  deviceId   String
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  metric     String
+  value      Float
+  recordedAt DateTime
+  updatedAt  DateTime @updatedAt
 
   @@id([deviceId, metric])
 }

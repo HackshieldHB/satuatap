@@ -34,9 +34,85 @@ export function computeCounterDelta(
   return { delta };
 }
 
+function metricNumber(metrics: unknown, key: string): number | null {
+  const value = (metrics as Record<string, unknown> | null)?.[key];
+  return typeof value === "number" ? value : null;
+}
+
+async function precedingRawCounter(
+  deviceId: string,
+  recordedAt: Date,
+  metric: CounterMetric
+): Promise<number | null> {
+  // Uses TelemetryReading @@unique([deviceId, recordedAt]) — same columns as the original index.
+  const row = await prisma.telemetryReading.findFirst({
+    where: { deviceId, recordedAt: { lt: recordedAt } },
+    orderBy: { recordedAt: "desc" },
+  });
+  return metricNumber(row?.metrics, metric);
+}
+
+async function adjustHourlyDelta(
+  homeId: string,
+  deviceId: string,
+  recordedAt: Date,
+  metricKey: string,
+  diff: number
+) {
+  if (diff === 0) return;
+  const start = hourStart(recordedAt);
+  const existing = await prisma.telemetryAggregate.findUnique({
+    where: {
+      deviceId_period_periodStart_metric: {
+        deviceId,
+        period: "hour",
+        periodStart: start,
+        metric: metricKey,
+      },
+    },
+  });
+  if (!existing) return;
+  await prisma.telemetryAggregate.update({
+    where: { id: existing.id },
+    data: { sum: existing.sum + diff },
+  });
+}
+
+async function rewriteSuccessorDelta(
+  homeId: string,
+  deviceId: string,
+  recordedAt: Date,
+  metric: CounterMetric,
+  insertedValue: number
+) {
+  const successor = await prisma.telemetryReading.findFirst({
+    where: { deviceId, recordedAt: { gt: recordedAt } },
+    orderBy: { recordedAt: "asc" },
+  });
+  if (!successor) return;
+  const succRaw = metricNumber(successor.metrics, metric);
+  if (succRaw == null) return;
+  const prev = (successor.metrics as Record<string, unknown>) ?? {};
+  const oldDelta = metricNumber(prev, `${metric}_delta`) ?? 0;
+  const { delta: newDelta } = computeCounterDelta(insertedValue, succRaw, metric);
+  await prisma.telemetryReading.update({
+    where: { id: successor.id },
+    data: { metrics: { ...prev, [`${metric}_delta`]: newDelta } as Prisma.InputJsonValue },
+  });
+  await adjustHourlyDelta(
+    homeId,
+    deviceId,
+    successor.recordedAt,
+    `${metric}_delta`,
+    newDelta - oldDelta
+  );
+}
+
 async function enrichCounterDeltas(
   deviceId: string,
-  metrics: Record<string, unknown>
+  recordedAt: Date,
+  metrics: Record<string, unknown>,
+  homeId: string
 ): Promise<Record<string, unknown>> {
   const enriched = { ...metrics };
   for (const metric of COUNTER_METRICS) {
@@ -45,25 +121,58 @@ async function enrichCounterDeltas(
     const snap = await prisma.deviceCounterSnapshot.findUnique({
       where: { deviceId_metric: { deviceId, metric } },
     });
-    const previous = snap?.value ?? null;
-    const { delta, warning } = computeCounterDelta(previous, current, metric);
-    if (warning) {
-      console.warn(
-        JSON.stringify({
-          msg: warning === "counter_reset" ? "Counter reset" : "Implausible counter jump",
-          deviceId,
-          metric,
-          previous,
-          current,
-        })
-      );
+    const inOrder = !snap || recordedAt > snap.recordedAt;
+
+    if (inOrder) {
+      const previous = snap?.value ?? null;
+      const { delta, warning } = computeCounterDelta(previous, current, metric);
+      if (warning === "counter_reset") {
+        console.warn(
+          JSON.stringify({
+            msg: "Counter reset",
+            reason: "counter_reset",
+            deviceId,
+            metric,
+            previous,
+            current,
+          })
+        );
+      } else if (warning === "implausible_jump") {
+        console.warn(
+          JSON.stringify({
+            msg: "Implausible counter jump",
+            reason: "implausible_jump",
+            deviceId,
+            metric,
+            previous,
+            current,
+          })
+        );
+      }
+      enriched[`${metric}_delta`] = delta;
+      await prisma.deviceCounterSnapshot.upsert({
+        where: { deviceId_metric: { deviceId, metric } },
+        update: { value: current, recordedAt },
+        create: { deviceId, metric, value: current, recordedAt },
+      });
+      continue;
     }
+
+    const previous = await precedingRawCounter(deviceId, recordedAt, metric);
+    const { delta } = computeCounterDelta(previous, current, metric);
+    console.info(
+      JSON.stringify({
+        msg: "Out-of-order reading",
+        reason: "out_of_order",
+        deviceId,
+        metric,
+        previous,
+        current,
+        recordedAt: recordedAt.toISOString(),
+      })
+    );
     enriched[`${metric}_delta`] = delta;
-    await prisma.deviceCounterSnapshot.upsert({
-      where: { deviceId_metric: { deviceId, metric } },
-      update: { value: current },
-      create: { deviceId, metric, value: current },
-    });
+    await rewriteSuccessorDelta(homeId, deviceId, recordedAt, metric, current);
   }
   return enriched;
 }
@@ -87,7 +196,12 @@ export async function ingestTelemetry(input: {
     });
     if (existing) return { ok: true as const, id: existing.id, duplicate: true };
 
-    const metrics = await enrichCounterDeltas(input.deviceId, input.metrics);
+    const metrics = await enrichCounterDeltas(
+      input.deviceId,
+      input.recordedAt,
+      input.metrics,
+      input.homeId
+    );
 
   const reading = await prisma.telemetryReading.create({
     data: {
