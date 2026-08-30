@@ -47,12 +47,18 @@ next-env.d.ts
 .idea/
 Thumbs.db
 
-# Mosquitto generated passwd / ACL / plaintext (never commit)
+# Mosquitto generated passwd / ACL (never commit)
 infrastructure/mosquitto/generated/
+
+# MQTT plaintext device passwords (outside the Mosquitto bind mount)
+.secrets/
 
 # Edge SQLite
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
+
+
+firmware/secrets/
 

@@ -1,14 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { writeDevPasswords } from "../../../scripts/mqtt-users.js";
 
 const prisma = new PrismaClient();
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const MQTT_GENERATED_DIR = path.join(ROOT, "infrastructure", "mosquitto", "generated");
 
 function randomMqttPassword(): string {
   return randomBytes(18).toString("base64url");
@@ -412,12 +407,7 @@ async function main() {
     }
   }
 
-  await mkdir(MQTT_GENERATED_DIR, { recursive: true });
-  await writeFile(
-    path.join(MQTT_GENERATED_DIR, "dev-passwords.json"),
-    JSON.stringify(mqttPlaintext, null, 2) + "\n",
-    "utf8"
-  );
+  await writeDevPasswords(mqttPlaintext);
 
   console.log("MQTT device credentials (shown once; hashes only are stored):");
   for (const d of devices) {

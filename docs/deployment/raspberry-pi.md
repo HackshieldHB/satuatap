@@ -31,7 +31,8 @@ SQLite, and the dashboard falls back to `/local/*`.
    ```
 
 5. Generate Mosquitto users after the cloud seed (or copy `infrastructure/mosquitto/generated`
-   from a machine that already ran `npm run db:seed` and `npm run mqtt:users`).
+   plus `.secrets/mqtt-dev-passwords.json` from a machine that already ran `npm run db:seed`
+   and `npm run mqtt:users`).
 
 6. Start the edge stack:
 

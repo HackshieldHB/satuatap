@@ -1,53 +1,214 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { prisma } from "@satu-atap/db";
 import { buildAclFile, type DeviceAclEntry } from "./mqtt-acl.js";
 
 const execFileAsync = promisify(execFile);
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GENERATED_DIR = path.join(ROOT, "infrastructure", "mosquitto", "generated");
-const PASSWD_PATH = path.join(GENERATED_DIR, "passwd");
-const ACL_PATH = path.join(GENERATED_DIR, "acl");
-const DEV_PASSWORDS_PATH = path.join(GENERATED_DIR, "dev-passwords.json");
+export const PASSWD_FILENAME = "passwd";
+export const PASSWD_TEMP_FILENAME = "passwd.tmp";
+export const ACL_FILENAME = "acl";
+export const LEGACY_DEV_PASSWORDS_FILENAME = "dev-passwords.json";
+const PASSWD_PATH = path.join(GENERATED_DIR, PASSWD_FILENAME);
+const ACL_PATH = path.join(GENERATED_DIR, ACL_FILENAME);
+export const DEV_PASSWORDS_PATH = path.join(ROOT, ".secrets", "mqtt-dev-passwords.json");
+export const LEGACY_DEV_PASSWORDS_PATH = path.join(GENERATED_DIR, LEGACY_DEV_PASSWORDS_FILENAME);
+export const MOSQUITTO_IMAGE = "eclipse-mosquitto:2";
+export const PASSWD_FILE_MODE = "0644";
 
 type DevPasswords = Record<string, string>;
 
-async function loadDevPasswords(): Promise<DevPasswords> {
+export async function removeIfExists(filePath: string): Promise<void> {
   try {
-    const raw = await readFile(DEV_PASSWORDS_PATH, "utf8");
-    return JSON.parse(raw) as DevPasswords;
-  } catch {
-    return {};
+    await unlink(filePath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await readFile(filePath);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
+}
+
+export async function ensureMosquittoPasswdPrereqs(
+  execDocker: typeof execFileAsync = execFileAsync
+): Promise<void> {
+  try {
+    await execDocker("docker", ["info"], { timeout: 20_000 });
+  } catch {
+    throw new Error(
+      "Docker is not responding. Start Docker Desktop and re-run npm run mqtt:users."
+    );
+  }
+  try {
+    await execDocker("docker", ["image", "inspect", MOSQUITTO_IMAGE], { timeout: 20_000 });
+  } catch {
+    throw new Error(
+      `Docker image ${MOSQUITTO_IMAGE} is not available. Pull it with \`docker pull ${MOSQUITTO_IMAGE}\` and re-run npm run mqtt:users.`
+    );
+  }
+}
+
+function dockerBind(generatedDir: string): string {
+  return generatedDir.replace(/\\/g, "/");
 }
 
 async function mosquittoPasswd(
   username: string,
   password: string,
-  create: boolean
+  create: boolean,
+  destFileName: string,
+  generatedDir: string
 ): Promise<void> {
-  const mount = GENERATED_DIR.replace(/\\/g, "/");
+  const mount = dockerBind(generatedDir);
   const args = [
     "run",
     "--rm",
     "-v",
     `${mount}:/mosquitto/config`,
-    "eclipse-mosquitto:2",
+    MOSQUITTO_IMAGE,
     "mosquitto_passwd",
     "-b",
     ...(create ? (["-c"] as const) : []),
-    "/mosquitto/config/passwd",
+    `/mosquitto/config/${destFileName}`,
     username,
     password,
   ];
   await execFileAsync("docker", args, { timeout: 60_000 });
 }
 
+export async function chmodPasswdInContainer(
+  generatedDir: string,
+  passwdFileName: string,
+  execDocker: typeof execFileAsync = execFileAsync
+): Promise<void> {
+  const mount = dockerBind(generatedDir);
+  try {
+    await execDocker(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "--user",
+        "0",
+        "--entrypoint",
+        "/bin/chmod",
+        "-v",
+        `${mount}:/mosquitto/config`,
+        MOSQUITTO_IMAGE,
+        PASSWD_FILE_MODE,
+        `/mosquitto/config/${passwdFileName}`,
+      ],
+      { timeout: 20_000 }
+    );
+  } catch {
+    throw new Error(
+      `Failed to chmod ${PASSWD_FILE_MODE} on the Mosquitto password file inside Docker. The broker runs as uid 1883 and cannot read a 0600 root-owned file. Re-run npm run mqtt:users.`
+    );
+  }
+}
+
+export async function generatePasswdFile(options: {
+  generatedDir: string;
+  users: Array<{ username: string; password: string }>;
+  ensureReady: () => Promise<void>;
+  hashUser: (
+    username: string,
+    password: string,
+    create: boolean,
+    destFileName: string
+  ) => Promise<void>;
+  chmodPasswd: (passwdFileName: string) => Promise<void>;
+  passwdFileName?: string;
+  tempFileName?: string;
+}): Promise<void> {
+  const passwdFileName = options.passwdFileName ?? PASSWD_FILENAME;
+  const tempFileName = options.tempFileName ?? PASSWD_TEMP_FILENAME;
+  const passwdPath = path.join(options.generatedDir, passwdFileName);
+  const tempPath = path.join(options.generatedDir, tempFileName);
+
+  const discardPasswdArtifacts = async () => {
+    await removeIfExists(passwdPath);
+    await removeIfExists(tempPath);
+  };
+
+  try {
+    await options.ensureReady();
+    await discardPasswdArtifacts();
+    for (let i = 0; i < options.users.length; i++) {
+      await options.hashUser(options.users[i].username, options.users[i].password, i === 0, tempFileName);
+    }
+    await rename(tempPath, passwdPath);
+    await options.chmodPasswd(passwdFileName);
+  } catch (err) {
+    await discardPasswdArtifacts();
+    throw err;
+  }
+}
+
+export async function migrateAndLoadDevPasswords(options?: {
+  secretsPath?: string;
+  legacyPath?: string;
+}): Promise<DevPasswords> {
+  const secretsPath = options?.secretsPath ?? DEV_PASSWORDS_PATH;
+  const legacyPath = options?.legacyPath ?? LEGACY_DEV_PASSWORDS_PATH;
+  await mkdir(path.dirname(secretsPath), { recursive: true });
+
+  const hasSecrets = await pathExists(secretsPath);
+  const hasLegacy = await pathExists(legacyPath);
+
+  if (hasLegacy && !hasSecrets) {
+    await rename(legacyPath, secretsPath);
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: "Migrated MQTT plaintext passwords out of the Mosquitto bind mount",
+        from: legacyPath,
+        to: secretsPath,
+      })
+    );
+  } else if (hasLegacy) {
+    await removeIfExists(legacyPath);
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: "Removed stale MQTT plaintext passwords from the Mosquitto bind mount",
+        path: legacyPath,
+      })
+    );
+  }
+
+  try {
+    const raw = await readFile(secretsPath, "utf8");
+    return JSON.parse(raw) as DevPasswords;
+  } catch {
+    return {};
+  }
+}
+
+export async function writeDevPasswords(
+  passwords: DevPasswords,
+  options?: { secretsPath?: string; legacyPath?: string }
+): Promise<void> {
+  const secretsPath = options?.secretsPath ?? DEV_PASSWORDS_PATH;
+  const legacyPath = options?.legacyPath ?? LEGACY_DEV_PASSWORDS_PATH;
+  await mkdir(path.dirname(secretsPath), { recursive: true });
+  await writeFile(secretsPath, JSON.stringify(passwords, null, 2) + "\n", "utf8");
+  await removeIfExists(legacyPath);
+}
+
 async function main() {
+  const { prisma } = await import("@satu-atap/db");
   await mkdir(GENERATED_DIR, { recursive: true });
 
   const gatewayUsername = process.env.MQTT_USERNAME ?? "gateway";
@@ -61,7 +222,7 @@ async function main() {
     include: { device: { select: { id: true, homeId: true, nodeId: true } } },
   });
 
-  const plaintext = await loadDevPasswords();
+  const plaintext = await migrateAndLoadDevPasswords();
   const devices: DeviceAclEntry[] = [];
   const users: Array<{ username: string; password: string }> = [];
 
@@ -111,9 +272,14 @@ async function main() {
 
   let passwdOk = true;
   try {
-    for (let i = 0; i < users.length; i++) {
-      await mosquittoPasswd(users[i].username, users[i].password, i === 0);
-    }
+    await generatePasswdFile({
+      generatedDir: GENERATED_DIR,
+      users,
+      ensureReady: () => ensureMosquittoPasswdPrereqs(),
+      hashUser: (username, password, create, destFileName) =>
+        mosquittoPasswd(username, password, create, destFileName, GENERATED_DIR),
+      chmodPasswd: (passwdFileName) => chmodPasswdInContainer(GENERATED_DIR, passwdFileName),
+    });
     console.log(
       JSON.stringify({ level: "info", msg: "Wrote Mosquitto password file", path: PASSWD_PATH })
     );
@@ -123,15 +289,10 @@ async function main() {
     console.error(
       JSON.stringify({
         level: "error",
-        msg: "Failed to hash Mosquitto passwords via docker mosquitto_passwd",
+        msg: "Failed to generate a broker-readable Mosquitto password file",
         error: message,
-        hint: "ACL was written. Start Docker Desktop and re-run npm run mqtt:users to generate passwd.",
+        hint: "ACL was written. No unreadable password file was left behind. Start Docker Desktop and re-run npm run mqtt:users.",
       })
-    );
-    await writeFile(
-      PASSWD_PATH,
-      "# ERROR: mosquitto_passwd hashing failed. Re-run npm run mqtt:users with Docker available.\n",
-      "utf8"
     );
   }
 
@@ -146,7 +307,12 @@ const isMain =
 if (isMain) {
   main().catch(async (err) => {
     console.error(err);
-    await prisma.$disconnect();
+    try {
+      const { prisma } = await import("@satu-atap/db");
+      await prisma.$disconnect();
+    } catch {
+      // ignore disconnect failures after a crash
+    }
     process.exit(1);
   });
 }
