@@ -269,6 +269,28 @@ async function main() {
       capabilities: ["on_off"],
       isOn: false,
     },
+    // Actuators: relay-driven on/off devices on the lighting node. A solenoid
+    // door lock and a water valve — same command→ack→state contract as a light.
+    {
+      id: "lock-front",
+      homeId: "home-1",
+      roomId: "room-1",
+      type: "switch",
+      name: "Kunci Pintu Depan",
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
+      isOn: false,
+    },
+    {
+      id: "valve-main",
+      homeId: "home-1",
+      roomId: "room-3",
+      type: "switch",
+      name: "Keran Utama Air",
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
+      isOn: false,
+    },
   ];
 
   // Gedung B (home-2) mirrors home-1's node/device layout: same sensors, distinct
@@ -519,7 +541,7 @@ async function main() {
     }
   }
 
-  console.log("Seed complete: user-1 / Gedung A (home-1) + Gedung B (home-2) / 24 devices / 6 nodes / 2 kios");
+  console.log("Seed complete: user-1 / Gedung A (home-1) + Gedung B (home-2) / 28 devices / 6 nodes / 2 kios");
 }
 
 main()
