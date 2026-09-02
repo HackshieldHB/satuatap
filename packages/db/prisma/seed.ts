@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { writeDevPasswords } from "../../../scripts/mqtt-users.js";
+import { migrateAndLoadDevPasswords, writeDevPasswords } from "../../../scripts/mqtt-users.js";
 
 const prisma = new PrismaClient();
 
@@ -13,6 +13,9 @@ async function main() {
   const passwordHash = await bcrypt.hash("password123", 10);
   const deviceSecretHash = await bcrypt.hash("dev-secret-local-only", 10);
   const mqttPlaintext: Record<string, string> = {};
+  // Reuse existing MQTT passwords so a reseed does NOT rotate credentials for
+  // devices/nodes already flashed to hardware; only new ids get a fresh password.
+  const existingSecrets = await migrateAndLoadDevPasswords();
 
   await prisma.user.upsert({
     where: { email: "kevin.santoso@gmail.com" },
@@ -45,14 +48,24 @@ async function main() {
 
   await prisma.building.upsert({
     where: { id: "building-1" },
-    update: {},
-    create: { id: "building-1", siteId: "site-1", name: "Rumah Kevin" },
+    update: { name: "Gedung A" },
+    create: { id: "building-1", siteId: "site-1", name: "Gedung A" },
+  });
+  await prisma.building.upsert({
+    where: { id: "building-2" },
+    update: { name: "Gedung B" },
+    create: { id: "building-2", siteId: "site-1", name: "Gedung B" },
   });
 
   await prisma.floor.upsert({
     where: { id: "floor-1" },
-    update: {},
+    update: { name: "Lantai 1" },
     create: { id: "floor-1", buildingId: "building-1", name: "Lantai 1" },
+  });
+  await prisma.floor.upsert({
+    where: { id: "floor-2" },
+    update: { name: "Lantai 1" },
+    create: { id: "floor-2", buildingId: "building-2", name: "Lantai 1" },
   });
 
   await prisma.home.upsert({
@@ -73,15 +86,23 @@ async function main() {
 
   await prisma.home.upsert({
     where: { id: "home-2" },
-    update: {},
+    update: {
+      buildingId: "building-2",
+      floorId: "floor-2",
+      name: "Unit B-1",
+      type: "apartment",
+      location: "Gedung B",
+    },
     create: {
       id: "home-2",
       organizationId: "org-1",
       siteId: "site-1",
+      buildingId: "building-2",
+      floorId: "floor-2",
       ownerId: "user-1",
-      name: "Villa Puncak",
-      type: "villa",
-      location: "Bandung",
+      name: "Unit B-1",
+      type: "apartment",
+      location: "Gedung B",
     },
   });
 
@@ -107,7 +128,9 @@ async function main() {
     { id: "room-1", homeId: "home-1", name: "Ruang Tamu" },
     { id: "room-2", homeId: "home-1", name: "Kamar Tidur" },
     { id: "room-3", homeId: "home-1", name: "Dapur" },
-    { id: "room-v1", homeId: "home-2", name: "Ruang Keluarga" },
+    { id: "room-b1", homeId: "home-2", name: "Ruang Tamu" },
+    { id: "room-b2", homeId: "home-2", name: "Kamar Tidur" },
+    { id: "room-b3", homeId: "home-2", name: "Dapur" },
   ];
   for (const r of rooms) {
     await prisma.room.upsert({
@@ -248,9 +271,33 @@ async function main() {
     },
   ];
 
+  // Gedung B (home-2) mirrors home-1's node/device layout: same sensors, distinct
+  // ids (-b) and node ids (-002). Node credentials + ACL derive from this list
+  // automatically, so no extra wiring is needed for the second building.
+  const H2_ROOM: Record<string, string> = {
+    "room-1": "room-b1",
+    "room-2": "room-b2",
+    "room-3": "room-b3",
+  };
+  const H2_NODE: Record<string, string> = {
+    "esp32-energy-001": "esp32-energy-002",
+    "esp32-water-env-001": "esp32-water-env-002",
+    "esp32-lighting-001": "esp32-lighting-002",
+  };
+  for (const d of [...devices]) {
+    devices.push({
+      ...d,
+      id: `${d.id}-b`,
+      homeId: "home-2",
+      roomId: H2_ROOM[d.roomId],
+      nodeId: H2_NODE[d.nodeId],
+      name: `${d.name} (B)`,
+    });
+  }
+
   const keepIds = devices.map((d) => d.id);
   await prisma.device.deleteMany({
-    where: { homeId: "home-1", id: { notIn: keepIds } },
+    where: { homeId: { in: ["home-1", "home-2"] }, id: { notIn: keepIds } },
   });
 
   for (const d of devices) {
@@ -284,7 +331,7 @@ async function main() {
     await prisma.deviceCapability.createMany({
       data: d.capabilities.map((capability) => ({ deviceId: d.id, capability })),
     });
-    const mqttPassword = randomMqttPassword();
+    const mqttPassword = existingSecrets[d.id] ?? randomMqttPassword();
     mqttPlaintext[d.id] = mqttPassword;
     const mqttPasswordHash = await bcrypt.hash(mqttPassword, 10);
     await prisma.deviceCredential.upsert({
@@ -412,7 +459,7 @@ async function main() {
   const nodes = new Map<string, string>(); // nodeId -> homeId
   for (const d of devices) nodes.set(d.nodeId, d.homeId);
   for (const [nodeId, nodeHomeId] of nodes) {
-    const nodePassword = randomMqttPassword();
+    const nodePassword = existingSecrets[nodeId] ?? randomMqttPassword();
     mqttPlaintext[nodeId] = nodePassword;
     const mqttPasswordHash = await bcrypt.hash(nodePassword, 10);
     await prisma.nodeCredential.upsert({
@@ -433,7 +480,7 @@ async function main() {
     console.log(`  ${nodeId}  username=${nodeId}  password=${mqttPlaintext[nodeId]}`);
   }
 
-  console.log("Seed complete: user-1 / home-1 / 12 Phase 1 devices / 3 nodes");
+  console.log("Seed complete: user-1 / Gedung A (home-1) + Gedung B (home-2) / 24 devices / 6 nodes");
 }
 
 main()
