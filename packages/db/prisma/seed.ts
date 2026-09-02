@@ -480,7 +480,46 @@ async function main() {
     console.log(`  ${nodeId}  username=${nodeId}  password=${mqttPlaintext[nodeId]}`);
   }
 
-  console.log("Seed complete: user-1 / Gedung A (home-1) + Gedung B (home-2) / 24 devices / 6 nodes");
+  // ─── Commerce: one kiosk per building + its catalog ───────────────────────
+  const KIOS_GOODS = [
+    { key: "galon", name: "Galon Air Mineral 19L", category: "air", emoji: "💧", priceIdr: 20000, unit: "per galon", eta: 15, desc: "Isi ulang galon Le Minerale / Aqua." },
+    { key: "air-dus", name: "Air Mineral 600ml (isi 24)", category: "air", emoji: "🚰", priceIdr: 48000, unit: "per dus", eta: 15, desc: "Satu dus isi 24 botol." },
+    { key: "beras", name: "Beras Pandan Wangi 5kg", category: "sembako", emoji: "🍚", priceIdr: 72000, unit: "per karung", eta: 20, desc: "Beras premium pulen." },
+    { key: "minyak", name: "Minyak Goreng 2L", category: "sembako", emoji: "🛢️", priceIdr: 38000, unit: "per pouch", eta: 20, desc: "Minyak goreng kemasan." },
+    { key: "telur", name: "Telur Ayam 1kg", category: "sembako", emoji: "🥚", priceIdr: 29000, unit: "per kg", eta: 20, desc: "Telur segar isi ±16 butir." },
+    { key: "nasgor", name: "Nasi Goreng Spesial", category: "makanan", emoji: "🍛", priceIdr: 22000, unit: "per porsi", eta: 25, desc: "Nasi goreng + telur + kerupuk." },
+    { key: "geprek", name: "Ayam Geprek + Nasi", category: "makanan", emoji: "🍗", priceIdr: 25000, unit: "per porsi", eta: 25, desc: "Ayam geprek sambal level 1-5." },
+    { key: "kopi", name: "Kopi Sachet (isi 10)", category: "makanan", emoji: "☕", priceIdr: 15000, unit: "per renceng", eta: 20, desc: "Kopi susu instan." },
+  ];
+  const vendors = [
+    { id: "kios-a", buildingId: "building-1", name: "Kios Lantai 1 · Gedung A" },
+    { id: "kios-b", buildingId: "building-2", name: "Kios Lantai 1 · Gedung B" },
+  ];
+  for (const v of vendors) {
+    await prisma.vendor.upsert({
+      where: { id: v.id },
+      update: { buildingId: v.buildingId, name: v.name, active: true },
+      create: { id: v.id, buildingId: v.buildingId, name: v.name, floorLabel: "Lantai 1", emoji: "🏪", active: true },
+    });
+    const prods = KIOS_GOODS.map((g) => ({
+      id: `${v.id}-${g.key}`,
+      vendorId: v.id,
+      name: g.name,
+      category: g.category,
+      emoji: g.emoji,
+      description: g.desc,
+      priceIdr: g.priceIdr,
+      unit: g.unit,
+      etaMinutes: g.eta,
+      available: true,
+    }));
+    await prisma.product.deleteMany({ where: { vendorId: v.id, id: { notIn: prods.map((p) => p.id) } } });
+    for (const p of prods) {
+      await prisma.product.upsert({ where: { id: p.id }, update: p, create: p });
+    }
+  }
+
+  console.log("Seed complete: user-1 / Gedung A (home-1) + Gedung B (home-2) / 24 devices / 6 nodes / 2 kios");
 }
 
 main()

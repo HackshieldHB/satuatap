@@ -15,6 +15,8 @@ import {
   eventPayloadSchema,
   availabilityPayloadSchema,
   deviceStatusPayloadSchema,
+  createOrderBodySchema,
+  updateOrderStatusBodySchema,
   type DeviceTypeId,
 } from "@satu-atap/shared";
 import { authenticate, requireHomeRole, requireInternalKey, audit } from "./auth.js";
@@ -1282,5 +1284,211 @@ export async function registerRoutes(app: FastifyInstance) {
       await prisma.automationExecution.create({ data: item });
     }
     return { success: true };
+  });
+
+  // ─── Commerce: in-building marketplace / kiosk ─────────────────────────────
+
+  // Vendor + its home/items, mapped to the shape the web `Order` type expects
+  // (plus routing fields the kiosk view needs).
+  type OrderWithRelations = Prisma.OrderGetPayload<{
+    include: {
+      vendor: true;
+      items: true;
+      home: { select: { name: true; floor: { select: { name: true } } } };
+    };
+  }>;
+  function mapOrder(o: OrderWithRelations) {
+    return {
+      id: o.id,
+      title: o.vendor.name,
+      kind: "service" as const,
+      items: o.items.map((it) => ({
+        id: it.id,
+        name: it.name,
+        price: it.priceIdr,
+        qty: it.qty,
+        emoji: it.emoji,
+        meta: o.vendor.name,
+      })),
+      total: o.totalIdr,
+      status: o.status,
+      createdAt: o.createdAt.toISOString(),
+      vendor: o.vendor.name,
+      eta: "±20 menit",
+      // kiosk routing / payment context
+      homeId: o.homeId,
+      unit: o.home.name,
+      floor: o.home.floor?.name ?? null,
+      paymentChannel: o.paymentChannel,
+      paymentStatus: o.paymentStatus,
+    };
+  }
+  const ORDER_INCLUDE = {
+    vendor: true,
+    items: true,
+    home: { select: { name: true, floor: { select: { name: true } } } },
+  } as const;
+
+  // A kiosk is operated by anyone who is a member of a home in its building.
+  async function canOperateVendor(userId: string, vendorId: string): Promise<boolean> {
+    const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
+    if (!vendor) return false;
+    const m = await prisma.membership.findFirst({
+      where: { userId, home: { buildingId: vendor.buildingId } },
+    });
+    return Boolean(m);
+  }
+
+  // Catalog available to a unit = active vendors in that unit's building.
+  app.get("/v1/homes/:homeId/marketplace", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const home = await prisma.home.findUnique({ where: { id: homeId }, select: { buildingId: true } });
+    if (!home?.buildingId) {
+      return { success: true, data: { vendors: [], products: [], categories: [{ id: "all", label: "Semua" }] } };
+    }
+    const vendors = await prisma.vendor.findMany({
+      where: { buildingId: home.buildingId, active: true },
+      include: { products: { where: { available: true }, orderBy: { name: "asc" } } },
+    });
+    const products = vendors.flatMap((v) =>
+      v.products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.priceIdr,
+        category: p.category,
+        emoji: p.emoji,
+        description: p.description,
+        kind: "goods" as const,
+        unit: p.unit ?? undefined,
+        vendor: `${v.name} · ${v.floorLabel}`,
+        vendorId: v.id,
+        eta: `±${p.etaMinutes} menit`,
+      }))
+    );
+    const categories = [
+      { id: "all", label: "Semua" },
+      ...Array.from(new Set(products.map((p) => p.category))).map((c) => ({ id: c, label: c })),
+    ];
+    return {
+      success: true,
+      data: {
+        vendors: vendors.map((v) => ({ id: v.id, name: v.name, floorLabel: v.floorLabel, emoji: v.emoji })),
+        products,
+        categories,
+      },
+    };
+  });
+
+  app.get("/v1/homes/:homeId/orders", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const orders = await prisma.order.findMany({
+      where: { homeId },
+      include: ORDER_INCLUDE,
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    return { success: true, data: orders.map(mapOrder) };
+  });
+
+  app.post("/v1/homes/:homeId/orders", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const parsed = createOrderBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: "Invalid payload" });
+    }
+    const { vendorId, items, paymentChannel, note } = parsed.data;
+    const home = await prisma.home.findUnique({ where: { id: homeId }, select: { buildingId: true } });
+    const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
+    if (!vendor || !home?.buildingId || vendor.buildingId !== home.buildingId) {
+      return reply.code(400).send({ success: false, error: "Kios tidak melayani gedung ini." });
+    }
+    const productIds = items.map((i) => i.productId);
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds }, vendorId, available: true },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    if (products.length !== new Set(productIds).size) {
+      return reply.code(400).send({ success: false, error: "Sebagian produk tidak tersedia." });
+    }
+    let total = 0;
+    const itemData = items.map((i) => {
+      const p = byId.get(i.productId)!;
+      total += p.priceIdr * i.qty;
+      return { productId: p.id, name: p.name, emoji: p.emoji, priceIdr: p.priceIdr, qty: i.qty };
+    });
+    // Simulated payment: cash settles on delivery (pending); everything else is
+    // treated as paid immediately (QRIS/VA/etc. are demo-only, no real gateway).
+    const paymentStatus = paymentChannel === "cash" ? "pending" : "paid";
+    const order = await prisma.order.create({
+      data: {
+        homeId,
+        vendorId,
+        status: "confirmed",
+        paymentChannel,
+        paymentStatus,
+        totalIdr: total,
+        note: note ?? null,
+        items: { create: itemData },
+      },
+      include: ORDER_INCLUDE,
+    });
+    const mapped = mapOrder(order);
+    hub.publish({ event: "order.created", homeId, data: { order: mapped }, ts: new Date().toISOString() });
+    await audit(req.user.sub, "order.create", "Order", order.id, { vendorId, total });
+    return { success: true, data: mapped };
+  });
+
+  // Kiosk view: orders addressed to a vendor.
+  app.get("/v1/vendors/:vendorId/orders", { preHandler: authenticate }, async (req, reply) => {
+    const { vendorId } = req.params as { vendorId: string };
+    if (!(await canOperateVendor(req.user.sub, vendorId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const { active } = req.query as { active?: string };
+    const orders = await prisma.order.findMany({
+      where: {
+        vendorId,
+        ...(active === "1" ? { status: { in: ["confirmed", "preparing", "delivering"] } } : {}),
+      },
+      include: ORDER_INCLUDE,
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    return { success: true, data: orders.map(mapOrder) };
+  });
+
+  app.patch("/v1/orders/:orderId/status", { preHandler: authenticate }, async (req, reply) => {
+    const { orderId } = req.params as { orderId: string };
+    const parsed = updateOrderStatusBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: "Invalid payload" });
+    }
+    const existing = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!existing) return reply.code(404).send({ success: false, error: "Order not found" });
+    if (!(await canOperateVendor(req.user.sub, existing.vendorId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    // Cash is collected on delivery; mark it paid once completed.
+    const paymentStatus =
+      parsed.data.status === "completed" && existing.paymentChannel === "cash"
+        ? "paid"
+        : existing.paymentStatus;
+    const order = await prisma.order.update({
+      where: { id: orderId },
+      data: { status: parsed.data.status, paymentStatus },
+      include: ORDER_INCLUDE,
+    });
+    const mapped = mapOrder(order);
+    hub.publish({ event: "order.updated", homeId: order.homeId, data: { order: mapped }, ts: new Date().toISOString() });
+    return { success: true, data: mapped };
   });
 }

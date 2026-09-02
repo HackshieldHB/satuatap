@@ -117,12 +117,13 @@ model Gateway {
 }
 
 model Building {
-  id     String  @id
-  siteId String
-  site   Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  name   String
-  floors Floor[]
-  homes  Home[]
+  id      String   @id
+  siteId  String
+  site    Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name    String
+  floors  Floor[]
+  homes   Home[]
+  vendors Vendor[]
 }
 
 model Floor {
@@ -161,6 +162,7 @@ model Home {
   motionEvents     MotionEvent[]
   utilityConfig    UtilityConfig?
   alertThresholds  AlertThreshold[]
+  orders           Order[]
 }
 
 model Membership {
@@ -447,4 +449,78 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ─── Commerce (in-building marketplace / kiosk) ──────────────────────────────
+
+// A kiosk / seller scoped to one building. Residents of that building order
+// from it and it delivers to their unit — the "kios lantai bawah" model.
+model Vendor {
+  id         String    @id
+  buildingId String
+  building   Building  @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  name       String
+  floorLabel String    @default("Lantai 1")
+  emoji      String    @default("🏪")
+  active     Boolean   @default(true)
+  products   Product[]
+  orders     Order[]
+}
+
+model Product {
+  id          String      @id
+  vendorId    String
+  vendor      Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  name        String
+  category    String
+  emoji       String      @default("📦")
+  description String      @default("")
+  priceIdr    Int
+  unit        String?
+  etaMinutes  Int         @default(20)
+  available   Boolean     @default(true)
+  orderItems  OrderItem[]
+
+  @@index([vendorId])
+}
+
+enum OrderStatus {
+  confirmed
+  preparing
+  delivering
+  completed
+  cancelled
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  homeId         String
+  home           Home        @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  vendorId       String
+  vendor         Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  status         OrderStatus @default(confirmed)
+  paymentChannel String // qris | cash | virtual_account | bank_transfer | credit_card
+  paymentStatus  String // pending | paid
+  totalIdr       Int
+  note           String?
+  items          OrderItem[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([homeId, createdAt])
+  @@index([vendorId, status])
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  name      String
+  emoji     String   @default("📦")
+  priceIdr  Int
+  qty       Int
+
+  @@index([orderId])
 }

@@ -146,6 +146,35 @@ export const createAutomationBodySchema = z.object({
   icon: z.string().optional(),
 });
 
+export const paymentChannelSchema = z.enum([
+  "qris",
+  "cash",
+  "virtual_account",
+  "bank_transfer",
+  "credit_card",
+]);
+
+export const orderStatusSchema = z.enum([
+  "confirmed",
+  "preparing",
+  "delivering",
+  "completed",
+  "cancelled",
+]);
+
+export const createOrderBodySchema = z.object({
+  vendorId: z.string().min(1),
+  items: z
+    .array(z.object({ productId: z.string().min(1), qty: z.number().int().min(1).max(99) }))
+    .min(1),
+  paymentChannel: paymentChannelSchema,
+  note: z.string().max(300).optional(),
+});
+
+export const updateOrderStatusBodySchema = z.object({ status: orderStatusSchema });
+
 export type TelemetryPayload = z.infer<typeof telemetryPayloadSchema>;
 export type TelemetryMetrics = z.infer<typeof telemetryMetricsSchema>;
 export type CommandType = z.infer<typeof commandTypeSchema>;
+export type CreateOrderBody = z.infer<typeof createOrderBodySchema>;
+export type OrderStatusValue = z.infer<typeof orderStatusSchema>;
