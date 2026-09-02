@@ -474,6 +474,7 @@ export interface AuthSession {
 /** How a payment is settled. No stored balance — every order picks one. */
 export type PaymentChannel =
   | "qris"
+  | "cash"
   | "virtual_account"
   | "bank_transfer"
   | "credit_card";
@@ -488,6 +489,8 @@ export interface OrderItem {
   /** Small context line, e.g. a vendor or token nominal. */
   meta?: string;
   emoji?: string;
+  /** Kiosk this item is sold by — used to route an order to a vendor. */
+  vendorId?: string;
 }
 
 export interface CheckoutOrder {
@@ -542,6 +545,7 @@ export interface Product {
   /** goods only */
   unit?: string;
   vendor?: string;
+  vendorId?: string;
   eta?: string;
 }
 
@@ -619,7 +623,8 @@ export type OrderStatus =
   | "confirmed"
   | "preparing"
   | "delivering"
-  | "completed";
+  | "completed"
+  | "cancelled";
 
 export interface Order {
   id: string;
@@ -631,6 +636,12 @@ export interface Order {
   createdAt: string;
   eta?: string;
   vendor?: string;
+  /** Kiosk routing / payment context (present on server-backed orders). */
+  homeId?: string;
+  unit?: string;
+  floor?: string | null;
+  paymentChannel?: PaymentChannel;
+  paymentStatus?: "pending" | "paid";
 }
 
 // ─── Rewards & subscriptions ─────────────────────────────────────

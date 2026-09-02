@@ -1,22 +1,52 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ProductCard } from "@/components/store/ProductCard";
 import { CartButton } from "@/components/store/CartButton";
 import { Search } from "@/components/ui/Search";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/utils";
 import { STORE_PRODUCTS, STORE_CATEGORIES } from "@/data/mock";
+import { useAuth } from "@/hooks/useAuth";
+import { commerceService } from "@/services/commerce.service";
+import type { Product } from "@/types";
 import { PackageSearch, Store, Bike } from "lucide-react";
 
 export default function StorePage() {
+  const { session } = useAuth();
+  const homeId = session?.selectedHomeId ?? null;
   const [cat, setCat] = useState("all");
   const [q, setQ] = useState("");
+  const [products, setProducts] = useState<Product[]>(STORE_PRODUCTS);
+  const [categories, setCategories] =
+    useState<{ id: string; label: string }[]>(STORE_CATEGORIES);
 
-  const products = STORE_PRODUCTS.filter(
-    (p) =>
-      (cat === "all" || p.category === cat) &&
-      (!q || p.name.toLowerCase().includes(q.toLowerCase()))
+  // Load this building's kiosk catalog; fall back to the local sample if the
+  // API is unreachable so the page still renders something to browse.
+  useEffect(() => {
+    if (!homeId) return;
+    let alive = true;
+    void commerceService.getMarketplace(homeId).then((res) => {
+      if (!alive || !res.success || !res.data) return;
+      if (res.data.products.length > 0) {
+        setProducts(res.data.products);
+        setCategories(res.data.categories);
+        setCat("all");
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [homeId]);
+
+  const filtered = useMemo(
+    () =>
+      products.filter(
+        (p) =>
+          (cat === "all" || p.category === cat) &&
+          (!q || p.name.toLowerCase().includes(q.toLowerCase()))
+      ),
+    [products, cat, q]
   );
 
   return (
@@ -25,7 +55,7 @@ export default function StorePage() {
         <div>
           <h1 className="text-xl font-bold">Warung Rumah</h1>
           <p className="text-sm text-muted">
-            Galon, sembako, makanan & kebutuhan harian.
+            Galon, sembako, makanan &amp; kebutuhan harian.
           </p>
         </div>
         <CartButton />
@@ -42,7 +72,7 @@ export default function StorePage() {
             Diantar dari kios lantai bawah
           </p>
           <p className="text-xs text-muted">
-            Kerja sama dengan warung & kios di gedungmu — pesan, antar, beres.
+            Kerja sama dengan warung &amp; kios di gedungmu — pesan, antar, beres.
           </p>
         </div>
       </div>
@@ -54,7 +84,7 @@ export default function StorePage() {
       />
 
       <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 lg:mx-0 lg:px-0">
-        {STORE_CATEGORIES.map((c) => (
+        {categories.map((c) => (
           <button
             key={c.id}
             onClick={() => setCat(c.id)}
@@ -70,7 +100,7 @@ export default function StorePage() {
         ))}
       </div>
 
-      {products.length === 0 ? (
+      {filtered.length === 0 ? (
         <EmptyState
           icon={PackageSearch}
           title="Barang tidak ditemukan"
@@ -78,7 +108,7 @@ export default function StorePage() {
         />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {products.map((p) => (
+          {filtered.map((p) => (
             <ProductCard key={p.id} product={p} />
           ))}
         </div>

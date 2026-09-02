@@ -31,6 +31,7 @@ export default function CartPage() {
           qty: l.qty,
           emoji: l.product.emoji,
           meta: l.product.vendor,
+          vendorId: l.product.vendorId,
         })),
         fee,
         feeLabel: hasGoods ? "Ongkir" : "Ongkir kirim",

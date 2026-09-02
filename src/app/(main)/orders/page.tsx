@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useOrders, ORDER_FLOW } from "@/hooks/useOrders";
 import { Card } from "@/components/ui/Card";
@@ -10,7 +10,10 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { Package, Check, ChefHat, Bike, PartyPopper } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 
-const STEP_META: Record<OrderStatus, { label: string; icon: typeof Check }> = {
+const STEP_META: Record<
+  Exclude<OrderStatus, "cancelled">,
+  { label: string; icon: typeof Check }
+> = {
   confirmed: { label: "Dikonfirmasi", icon: Check },
   preparing: { label: "Disiapkan", icon: ChefHat },
   delivering: { label: "Diantar", icon: Bike },
@@ -18,19 +21,14 @@ const STEP_META: Record<OrderStatus, { label: string; icon: typeof Check }> = {
 };
 
 export default function OrdersPage() {
-  const { orders, advance } = useOrders();
-  const ordersRef = useRef(orders);
-  ordersRef.current = orders;
+  const { orders, refresh } = useOrders();
 
-  // Live tracking: nudge active orders forward every few seconds.
+  // Live tracking is read-only here — the kiosk advances status; the resident
+  // just polls to see it move.
   useEffect(() => {
-    const t = setInterval(() => {
-      ordersRef.current
-        .filter((o) => o.status !== "completed")
-        .forEach((o) => advance(o.id));
-    }, 6000);
+    const t = setInterval(() => void refresh(), 5000);
     return () => clearInterval(t);
-  }, [advance]);
+  }, [refresh]);
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto animate-fade-in">
@@ -92,7 +90,7 @@ function OrderCard({ order }: { order: Order }) {
       {/* Timeline */}
       <div className="flex items-center">
         {ORDER_FLOW.map((step, i) => {
-          const meta = STEP_META[step];
+          const meta = STEP_META[step as Exclude<OrderStatus, "cancelled">];
           const Icon = meta.icon;
           const done = i <= currentIdx;
           const active = i === currentIdx;

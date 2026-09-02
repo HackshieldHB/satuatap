@@ -5,10 +5,12 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   type ReactNode,
 } from "react";
 import type { Order, OrderStatus } from "@/types";
-import { MOCK_ORDERS } from "@/data/mock";
+import { useAuth } from "@/hooks/useAuth";
+import { commerceService } from "@/services/commerce.service";
 
 export const ORDER_FLOW: OrderStatus[] = [
   "confirmed",
@@ -20,49 +22,52 @@ export const ORDER_FLOW: OrderStatus[] = [
 interface OrdersContextValue {
   orders: Order[];
   activeCount: number;
-  addOrder: (
-    o: Omit<Order, "id" | "status" | "createdAt"> & { status?: OrderStatus }
-  ) => string;
-  advance: (id: string) => void;
+  loading: boolean;
+  refresh: () => Promise<void>;
+  advance: (id: string) => Promise<void>;
 }
 
 const OrdersContext = createContext<OrdersContextValue | null>(null);
 
 export function OrdersProvider({ children }: { children: ReactNode }) {
-  const [orders, setOrders] = useState<Order[]>(() =>
-    MOCK_ORDERS.map((o) => ({ ...o }))
+  const { session } = useAuth();
+  const homeId = session?.selectedHomeId ?? null;
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!homeId) return;
+    setLoading(true);
+    const res = await commerceService.getOrders(homeId);
+    if (res.success && res.data) setOrders(res.data);
+    setLoading(false);
+  }, [homeId]);
+
+  // Load the current unit's orders, and reload when the selected building changes.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const advance = useCallback(
+    async (id: string) => {
+      const current = orders.find((o) => o.id === id);
+      if (!current) return;
+      const i = ORDER_FLOW.indexOf(current.status);
+      if (i < 0 || i >= ORDER_FLOW.length - 1) return;
+      const res = await commerceService.advanceOrder(id, ORDER_FLOW[i + 1]);
+      if (res.success && res.data) {
+        setOrders((prev) => prev.map((o) => (o.id === id ? res.data! : o)));
+      }
+    },
+    [orders]
   );
 
-  const addOrder = useCallback<OrdersContextValue["addOrder"]>((o) => {
-    const id = `ord-${Date.now()}`;
-    setOrders((prev) => [
-      {
-        ...o,
-        id,
-        createdAt: new Date().toISOString(),
-        status: o.status ?? "confirmed",
-      },
-      ...prev,
-    ]);
-    return id;
-  }, []);
-
-  const advance = useCallback((id: string) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id !== id) return o;
-        const i = ORDER_FLOW.indexOf(o.status);
-        return i < ORDER_FLOW.length - 1
-          ? { ...o, status: ORDER_FLOW[i + 1] }
-          : o;
-      })
-    );
-  }, []);
-
-  const activeCount = orders.filter((o) => o.status !== "completed").length;
+  const activeCount = orders.filter(
+    (o) => o.status !== "completed" && o.status !== "cancelled"
+  ).length;
 
   return (
-    <OrdersContext.Provider value={{ orders, activeCount, addOrder, advance }}>
+    <OrdersContext.Provider value={{ orders, activeCount, loading, refresh, advance }}>
       {children}
     </OrdersContext.Provider>
   );

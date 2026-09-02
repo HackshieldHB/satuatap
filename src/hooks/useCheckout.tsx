@@ -14,6 +14,8 @@ import { MockQr } from "@/components/payments/MockQr";
 import { useToast } from "@/hooks/useToast";
 import { useOrders } from "@/hooks/useOrders";
 import { useRewards } from "@/hooks/useRewards";
+import { useAuth } from "@/hooks/useAuth";
+import { commerceService } from "@/services/commerce.service";
 import { PROMOS } from "@/data/mock";
 import { formatCurrency, delay, cn } from "@/lib/utils";
 import {
@@ -21,6 +23,7 @@ import {
   Building2,
   Landmark,
   CreditCard,
+  Wallet,
   CheckCircle2,
   ShieldCheck,
   Ticket,
@@ -37,6 +40,7 @@ const CheckoutContext = createContext<CheckoutContextValue | null>(null);
 
 const METHODS: { id: PaymentChannel; label: string; icon: LucideIcon }[] = [
   { id: "qris", label: "QRIS", icon: QrCode },
+  { id: "cash", label: "Tunai (COD)", icon: Wallet },
   { id: "virtual_account", label: "Virtual Account", icon: Building2 },
   { id: "bank_transfer", label: "Transfer Bank", icon: Landmark },
   { id: "credit_card", label: "Kartu Kredit", icon: CreditCard },
@@ -44,8 +48,9 @@ const METHODS: { id: PaymentChannel; label: string; icon: LucideIcon }[] = [
 
 export function CheckoutProvider({ children }: { children: ReactNode }) {
   const { showToast } = useToast();
-  const { addOrder } = useOrders();
+  const { refresh: refreshOrders } = useOrders();
   const { addPoints } = useRewards();
+  const { session } = useAuth();
   const [order, setOrder] = useState<CheckoutOrder | null>(null);
   const [method, setMethod] = useState<PaymentChannel>("qris");
   const [paying, setPaying] = useState(false);
@@ -106,16 +111,25 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     setPaid(true);
     successRef.current?.();
     addPoints(pointsEarned);
-    if (order && (order.kind === "marketplace" || order.kind === "service")) {
-      addOrder({
-        title: order.title,
-        kind: order.kind,
-        items: order.items,
-        total,
-        vendor: order.items[0]?.meta,
-        eta: order.kind === "service" ? "±20 menit" : "1–3 hari kerja",
-        status: "confirmed",
-      });
+    const homeId = session?.selectedHomeId;
+    if (order && homeId && (order.kind === "marketplace" || order.kind === "service")) {
+      // Route the cart to the kiosk(s) it came from — one order per vendor.
+      const groups = new Map<string, { productId: string; qty: number }[]>();
+      for (const it of order.items) {
+        if (!it.vendorId) continue;
+        const arr = groups.get(it.vendorId) ?? [];
+        arr.push({ productId: it.id, qty: it.qty });
+        groups.set(it.vendorId, arr);
+      }
+      for (const [vendorId, items] of groups) {
+        await commerceService.createOrder(homeId, {
+          vendorId,
+          items,
+          paymentChannel: method,
+          note: order.subtitle,
+        });
+      }
+      if (groups.size > 0) await refreshOrders();
     }
     showToast(`Pembayaran berhasil · +${pointsEarned} poin`, "success");
     setTimeout(() => setOrder(null), 2000);
@@ -325,6 +339,17 @@ function MethodDetail({
           ["Atas Nama", "PT Satu Atap Indonesia"],
         ]}
         note="Transfer tepat sampai 3 digit terakhir untuk verifikasi cepat."
+      />
+    );
+  }
+  if (method === "cash") {
+    return (
+      <InfoBox
+        rows={[
+          ["Bayar", "Tunai saat barang diantar"],
+          ["Total disiapkan", formatCurrency(total)],
+        ]}
+        note="Pengantar dari kios lantai bawah menagih tunai saat sampai di unitmu."
       />
     );
   }
