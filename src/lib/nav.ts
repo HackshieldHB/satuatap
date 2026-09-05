@@ -20,6 +20,7 @@ import {
   Wallet,
   Receipt,
   ClipboardList,
+  KeyRound,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -34,6 +35,7 @@ export const MAIN_NAV: NavItem[] = [
   { href: "/alerts", label: "Peringatan", icon: Bell },
   { href: "/ai", label: "Otomatisasi", icon: Bot },
   { href: "/system", label: "Sistem", icon: Server },
+  { href: "/access", label: "Akses & Tamu", icon: KeyRound },
   { href: "/compare", label: "Bandingkan", icon: Building2 },
   { href: "/services", label: "Layanan", icon: LayoutGrid },
   { href: "/kiosk", label: "Kios (Operator)", icon: Store },

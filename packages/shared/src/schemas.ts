@@ -186,6 +186,19 @@ export const generateInvoiceBodySchema = z.object({
     .optional(),
 });
 
+// ─── Access control ──────────────────────────────────────────────────────────
+
+export const createPassBodySchema = z.object({
+  label: z.string().min(1).max(80),
+  kind: z.enum(["guest", "courier", "resident"]).default("guest"),
+  validMinutes: z.number().int().min(5).max(43200).default(120), // ≤ 30 days
+  maxUses: z.number().int().min(0).max(100).default(0),
+});
+
+export const verifyAccessBodySchema = z.object({
+  code: z.string().min(4).max(64),
+});
+
 // ─── Prepaid utility wallet ──────────────────────────────────────────────────
 
 export const prepaidTopupBodySchema = z.object({

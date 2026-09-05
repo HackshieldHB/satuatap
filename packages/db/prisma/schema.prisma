@@ -165,6 +165,8 @@ model Home {
   orders           Order[]
   prepaidAccount   PrepaidAccount?
   invoices         Invoice[]
+  accessPasses     AccessPass[]
+  accessLogs       AccessLog[]
 }
 
 model Membership {
@@ -490,6 +492,46 @@ model PrepaidTransaction {
   createdAt       DateTime @default(now())
 
   @@index([homeId, createdAt])
+}
+
+// ─── Access control (guest passes + door log) ────────────────────────────────
+
+// A time-boxed credential to open a unit's / lobby's solenoid lock. Issued by a
+// resident for a guest or a kiosk courier; verified at a door panel by PIN or by
+// the QR token. Reuses the lock actuator's command→ack→state contract.
+model AccessPass {
+  id          String    @id @default(cuid())
+  homeId      String
+  home        Home      @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  createdById String?
+  label       String    // guest name or "Kurir Kios"
+  kind        String    @default("guest") // guest | courier | resident
+  pin         String    // 6-digit code
+  token       String    @unique // opaque QR token
+  validFrom   DateTime  @default(now())
+  validUntil  DateTime
+  maxUses     Int       @default(0) // 0 = unlimited within the window
+  uses        Int       @default(0)
+  revoked     Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  logs        AccessLog[]
+
+  @@index([homeId, createdAt])
+}
+
+model AccessLog {
+  id         String   @id @default(cuid())
+  homeId     String
+  home       Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  passId     String?
+  pass       AccessPass? @relation(fields: [passId], references: [id])
+  deviceId   String?
+  action     String   // granted | denied | resident_unlock
+  actorLabel String
+  reason     String?
+  occurredAt DateTime @default(now())
+
+  @@index([homeId, occurredAt])
 }
 
 // ─── Billing (postpaid utility + IPL invoices) ───────────────────────────────

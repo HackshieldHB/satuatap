@@ -21,8 +21,18 @@ import {
   prepaidConfigBodySchema,
   payInvoiceBodySchema,
   generateInvoiceBodySchema,
+  createPassBodySchema,
+  verifyAccessBodySchema,
   type DeviceTypeId,
 } from "@satu-atap/shared";
+import {
+  createPass,
+  revokePass,
+  listPasses,
+  listLogs,
+  residentUnlock,
+  verifyAndUnlock,
+} from "./access.js";
 import { getPrepaidStatus, topupPrepaid } from "./prepaid.js";
 import {
   generateInvoiceForHome,
@@ -1674,4 +1684,80 @@ export async function registerRoutes(app: FastifyInstance) {
       return { success: true, data: invoice };
     }
   );
+
+  // ─── Access control: guest passes, logs, unlock ────────────────────────────
+
+  app.get("/v1/homes/:homeId/access-passes", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await listPasses(homeId) };
+  });
+
+  app.post("/v1/homes/:homeId/access-passes", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const parsed = createPassBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: "Invalid payload" });
+    }
+    const pass = await createPass({ homeId, createdById: req.user.sub, ...parsed.data });
+    await audit(req.user.sub, "access.pass.create", "AccessPass", pass.id, { homeId, kind: pass.kind });
+    return { success: true, data: pass };
+  });
+
+  app.post(
+    "/v1/homes/:homeId/access-passes/:id/revoke",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { homeId, id } = req.params as { homeId: string; id: string };
+      if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
+      }
+      try {
+        const pass = await revokePass(homeId, id);
+        return { success: true, data: pass };
+      } catch (e) {
+        const err = e as { statusCode?: number; message: string };
+        return reply.code(err.statusCode ?? 500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  app.get("/v1/homes/:homeId/access-logs", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await listLogs(homeId) };
+  });
+
+  app.post("/v1/homes/:homeId/unlock", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const res = await residentUnlock(homeId, user?.fullName ?? "Penghuni");
+    if (!res.ok) return reply.code(400).send({ success: false, error: res.error });
+    await audit(req.user.sub, "access.unlock", "Home", homeId);
+    return { success: true, data: { ok: true } };
+  });
+
+  // Door-panel verification: a member scans/enters a code to open the lock.
+  app.post("/v1/homes/:homeId/access/verify", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const parsed = verifyAccessBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: "Invalid payload" });
+    }
+    const res = await verifyAndUnlock(homeId, parsed.data.code);
+    return { success: true, data: res };
+  });
 }
