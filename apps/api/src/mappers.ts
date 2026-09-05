@@ -15,6 +15,7 @@ export function mapHome(h: Home, extra?: { deviceCount?: number; roomCount?: num
     deviceCount: extra?.deviceCount ?? 0,
     roomCount: extra?.roomCount ?? 0,
     ownerId: h.ownerId,
+    buildingId: h.buildingId ?? null,
     createdAt: h.createdAt.toISOString(),
   };
 }

@@ -19,9 +19,21 @@ import {
   updateOrderStatusBodySchema,
   prepaidTopupBodySchema,
   prepaidConfigBodySchema,
+  payInvoiceBodySchema,
+  generateInvoiceBodySchema,
   type DeviceTypeId,
 } from "@satu-atap/shared";
 import { getPrepaidStatus, topupPrepaid } from "./prepaid.js";
+import {
+  generateInvoiceForHome,
+  generateBuildingInvoices,
+  listInvoices,
+  payInvoice,
+  listBuildingUnits,
+  canManageBuilding,
+  parsePeriod,
+  monthStart,
+} from "./billing.js";
 import { authenticate, requireHomeRole, requireInternalKey, audit } from "./auth.js";
 import {
   ingestTelemetry,
@@ -1580,4 +1592,86 @@ export async function registerRoutes(app: FastifyInstance) {
       return reply.code(err.statusCode ?? 500).send({ success: false, error: err.message });
     }
   });
+
+  // ─── Billing: resident invoices ────────────────────────────────────────────
+
+  app.get("/v1/homes/:homeId/invoices", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await listInvoices(homeId) };
+  });
+
+  app.post(
+    "/v1/homes/:homeId/invoices/:invoiceId/pay",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { homeId, invoiceId } = req.params as { homeId: string; invoiceId: string };
+      if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
+      }
+      const parsed = payInvoiceBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ success: false, error: "Invalid payload" });
+      }
+      const inv = await prisma.invoice.findFirst({ where: { id: invoiceId, homeId } });
+      if (!inv) return reply.code(404).send({ success: false, error: "Invoice not found" });
+      // Simulated payment settles immediately (no real gateway).
+      const paid = await payInvoice(invoiceId, parsed.data.paymentChannel);
+      await audit(req.user.sub, "invoice.pay", "Invoice", invoiceId, { homeId });
+      return { success: true, data: paid };
+    }
+  );
+
+  // ─── Billing: building-manager console ─────────────────────────────────────
+
+  app.get("/v1/buildings/:buildingId/units", { preHandler: authenticate }, async (req, reply) => {
+    const { buildingId } = req.params as { buildingId: string };
+    if (!(await canManageBuilding(req.user.sub, buildingId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await listBuildingUnits(buildingId) };
+  });
+
+  app.post(
+    "/v1/buildings/:buildingId/invoices/generate",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { buildingId } = req.params as { buildingId: string };
+      if (!(await canManageBuilding(req.user.sub, buildingId))) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
+      }
+      const parsed = generateInvoiceBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ success: false, error: "Invalid payload" });
+      }
+      const period = parsePeriod(parsed.data.period);
+      const invoices = await generateBuildingInvoices(buildingId, period);
+      await audit(req.user.sub, "invoice.generate", "Building", buildingId, {
+        period: parsed.data.period ?? "current",
+        count: invoices.length,
+      });
+      return { success: true, data: invoices };
+    }
+  );
+
+  app.post(
+    "/v1/homes/:homeId/invoices/generate",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { homeId } = req.params as { homeId: string };
+      if (!(await requireHomeRole(req.user.sub, homeId, "ADMIN"))) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
+      }
+      const parsed = generateInvoiceBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ success: false, error: "Invalid payload" });
+      }
+      const period = parsed.data.period ? parsePeriod(parsed.data.period) : monthStart();
+      const invoice = await generateInvoiceForHome(homeId, period);
+      await audit(req.user.sub, "invoice.generate", "Home", homeId, { period: parsed.data.period ?? "current" });
+      return { success: true, data: invoice };
+    }
+  );
 }

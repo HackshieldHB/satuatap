@@ -99,6 +99,7 @@ export interface Home {
   deviceCount: number;
   roomCount: number;
   ownerId: string;
+  buildingId?: string | null;
   createdAt: string;
 }
 

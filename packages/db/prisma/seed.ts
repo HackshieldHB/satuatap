@@ -114,11 +114,12 @@ async function main() {
     });
     await prisma.utilityConfig.upsert({
       where: { homeId },
-      update: {},
+      update: { serviceChargeIdr: 250000 },
       create: {
         homeId,
         electricityTariffPerKwh: 1444.7,
         waterTariffPerM3: 18000,
+        serviceChargeIdr: 250000, // IPL / iuran pengelolaan per bulan
         currency: "IDR",
       },
     });

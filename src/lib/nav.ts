@@ -18,6 +18,8 @@ import {
   Building2,
   Store,
   Wallet,
+  Receipt,
+  ClipboardList,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -36,6 +38,8 @@ export const MAIN_NAV: NavItem[] = [
   { href: "/services", label: "Layanan", icon: LayoutGrid },
   { href: "/kiosk", label: "Kios (Operator)", icon: Store },
   { href: "/prepaid", label: "Prabayar", icon: Wallet },
+  { href: "/invoices", label: "Tagihan", icon: Receipt },
+  { href: "/manage", label: "Pengelola", icon: ClipboardList },
   { href: "/payments", label: "Pembayaran", icon: CreditCard },
   { href: "/notifications", label: "Notifikasi", icon: Activity },
 ];

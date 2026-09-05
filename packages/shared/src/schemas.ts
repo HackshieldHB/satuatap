@@ -173,6 +173,19 @@ export const createOrderBodySchema = z.object({
 
 export const updateOrderStatusBodySchema = z.object({ status: orderStatusSchema });
 
+// ─── Billing (postpaid invoices) ─────────────────────────────────────────────
+
+export const payInvoiceBodySchema = z.object({
+  paymentChannel: paymentChannelSchema.default("qris"),
+});
+
+export const generateInvoiceBodySchema = z.object({
+  period: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
+});
+
 // ─── Prepaid utility wallet ──────────────────────────────────────────────────
 
 export const prepaidTopupBodySchema = z.object({
