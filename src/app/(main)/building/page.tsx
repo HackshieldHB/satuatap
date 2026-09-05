@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
-import { MOCK_ANNOUNCEMENTS } from "@/data/mock";
+import { useAuth } from "@/hooks/useAuth";
+import { communityService, type Announcement } from "@/services/community.service";
 import { cn } from "@/lib/utils";
 import {
   Megaphone,
@@ -13,39 +15,55 @@ import {
   Building2,
 } from "lucide-react";
 
+// Hub tiles now point at the real feature pages (community, access, invoices).
 const FEATURES = [
   {
-    href: "/building/announcements",
+    href: "/community",
     label: "Pengumuman",
-    desc: "Info dari pengelola & RT",
+    desc: "Info dari pengelola",
     icon: Megaphone,
     color: "bg-info/10 text-info",
   },
   {
-    href: "/building/report",
+    href: "/community",
     label: "Lapor Kerusakan",
     desc: "Lift, lampu, kebersihan",
     icon: Wrench,
     color: "bg-warning/10 text-warning",
   },
   {
-    href: "/building/visitor",
-    label: "Visitor Pass",
-    desc: "QR akses tamu ke lobby",
+    href: "/access",
+    label: "Akses Tamu",
+    desc: "Kode/QR tamu ke lobby",
     icon: QrCode,
     color: "bg-secondary/10 text-secondary",
   },
   {
-    href: "/payments",
+    href: "/invoices",
     label: "Bayar IPL",
-    desc: "Iuran gedung & parkir",
+    desc: "Iuran gedung & utilitas",
     icon: Receipt,
     color: "bg-primary/10 text-primary",
   },
 ];
 
 export default function BuildingPage() {
-  const latest = MOCK_ANNOUNCEMENTS.find((a) => a.pinned) ?? MOCK_ANNOUNCEMENTS[0];
+  const { session } = useAuth();
+  const homeId = session?.selectedHomeId ?? null;
+  const [latest, setLatest] = useState<Announcement | null>(null);
+
+  useEffect(() => {
+    if (!homeId) return;
+    let alive = true;
+    void communityService.getAnnouncements(homeId).then((res) => {
+      if (alive && res.success && res.data) {
+        setLatest(res.data.find((a) => a.pinned) ?? res.data[0] ?? null);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [homeId]);
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto animate-fade-in">
@@ -55,7 +73,7 @@ export default function BuildingPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold">Gedung</h1>
-          <p className="text-sm text-muted">Apartemen Green Park · Tower A</p>
+          <p className="text-sm text-muted">Layanan &amp; komunitas gedung kamu</p>
         </div>
       </div>
 
@@ -64,7 +82,7 @@ export default function BuildingPage() {
           const Icon = f.icon;
           return (
             <Link
-              key={f.href}
+              key={f.label}
               href={f.href}
               style={{ animationDelay: `${i * 50}ms` }}
               className="group animate-pop-in rounded-lg border border-border/50 bg-surface p-4 shadow-card transition-all duration-200 hover:-translate-y-1 hover:shadow-floating"
@@ -85,7 +103,7 @@ export default function BuildingPage() {
       </div>
 
       {latest && (
-        <Link href="/building/announcements">
+        <Link href="/community">
           <Card className="flex items-center gap-3 hover:shadow-floating transition-shadow">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-info/10 text-info">
               <Megaphone className="h-5 w-5" />
