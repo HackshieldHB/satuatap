@@ -37,6 +37,7 @@ export const MAIN_NAV: NavItem[] = [
   { href: "/water", label: "Air", icon: Droplets },
   { href: "/alerts", label: "Peringatan", icon: Bell },
   { href: "/ai", label: "Otomatisasi", icon: Bot },
+  { href: "/insights", label: "Wawasan AI", icon: Sparkles },
   { href: "/system", label: "Sistem", icon: Server },
   { href: "/access", label: "Akses & Tamu", icon: KeyRound },
   { href: "/community", label: "Komunitas", icon: Megaphone },

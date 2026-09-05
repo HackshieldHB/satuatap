@@ -45,6 +45,7 @@ import {
   listHomeParcels,
   pickupParcel,
 } from "./community.js";
+import { getInsights, getLeaderboard } from "./insights.js";
 import {
   createPass,
   revokePass,
@@ -1946,4 +1947,24 @@ export async function registerRoutes(app: FastifyInstance) {
       }
     }
   );
+
+  // ─── AI insights & efficiency leaderboard ──────────────────────────────────
+
+  app.get("/v1/homes/:homeId/insights", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await getInsights(homeId) };
+  });
+
+  app.get("/v1/homes/:homeId/leaderboard", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const home = await prisma.home.findUnique({ where: { id: homeId }, select: { buildingId: true } });
+    if (!home?.buildingId) return { success: true, data: [] };
+    return { success: true, data: await getLeaderboard(home.buildingId) };
+  });
 }
