@@ -6,4 +6,6 @@ export const config = {
   gatewayUrl: process.env.GATEWAY_URL ?? "http://127.0.0.1:3100",
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
   mqttUrl: process.env.MQTT_URL ?? "mqtt://127.0.0.1:1883",
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+  telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME ?? "",
 };

@@ -24,6 +24,7 @@ import {
   Megaphone,
   CalendarCheck,
   Package,
+  Send,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -51,6 +52,7 @@ export const MAIN_NAV: NavItem[] = [
   { href: "/manage", label: "Pengelola", icon: ClipboardList },
   { href: "/payments", label: "Pembayaran", icon: CreditCard },
   { href: "/notifications", label: "Notifikasi", icon: Activity },
+  { href: "/telegram", label: "Telegram", icon: Send },
 ];
 
 export const BOTTOM_NAV: NavItem[] = [

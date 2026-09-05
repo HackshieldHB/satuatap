@@ -28,6 +28,7 @@ import {
   updateTicketBodySchema,
   bookAmenityBodySchema,
   createParcelBodySchema,
+  bindTelegramBodySchema,
   type DeviceTypeId,
 } from "@satu-atap/shared";
 import {
@@ -46,6 +47,13 @@ import {
   pickupParcel,
 } from "./community.js";
 import { getInsights, getLeaderboard } from "./insights.js";
+import {
+  startLink as tgStartLink,
+  getStatus as tgGetStatus,
+  unlink as tgUnlink,
+  bindDev as tgBindDev,
+  handleWebhookUpdate as tgWebhook,
+} from "./telegram.js";
 import {
   createPass,
   revokePass,
@@ -1966,5 +1974,33 @@ export async function registerRoutes(app: FastifyInstance) {
     const home = await prisma.home.findUnique({ where: { id: homeId }, select: { buildingId: true } });
     if (!home?.buildingId) return { success: true, data: [] };
     return { success: true, data: await getLeaderboard(home.buildingId) };
+  });
+
+  // ─── Telegram notifications ────────────────────────────────────────────────
+
+  app.get("/v1/telegram/status", { preHandler: authenticate }, async (req) => {
+    return { success: true, data: await tgGetStatus(req.user.sub) };
+  });
+
+  app.post("/v1/telegram/link", { preHandler: authenticate }, async (req) => {
+    return { success: true, data: await tgStartLink(req.user.sub) };
+  });
+
+  app.post("/v1/telegram/unlink", { preHandler: authenticate }, async (req) => {
+    return { success: true, data: await tgUnlink(req.user.sub) };
+  });
+
+  // Dev/demo bind: link a chat id without a live bot (still real delivery once a
+  // token is configured). Used to demo the flow end-to-end.
+  app.post("/v1/telegram/bind", { preHandler: authenticate }, async (req, reply) => {
+    const parsed = bindTelegramBodySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    return { success: true, data: await tgBindDev(req.user.sub, parsed.data.chatId) };
+  });
+
+  // Telegram calls this webhook (set via setWebhook). Unauthenticated by design;
+  // it only binds a chat to a previously-minted link code.
+  app.post("/v1/telegram/webhook", async (req) => {
+    return await tgWebhook(req.body ?? {});
   });
 }

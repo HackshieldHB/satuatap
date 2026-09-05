@@ -215,6 +215,12 @@ export const createParcelBodySchema = z.object({
   description: z.string().max(120).optional(),
 });
 
+// ─── Telegram notifications ──────────────────────────────────────────────────
+
+export const bindTelegramBodySchema = z.object({
+  chatId: z.string().min(1).max(64),
+});
+
 // ─── Access control ──────────────────────────────────────────────────────────
 
 export const createPassBodySchema = z.object({

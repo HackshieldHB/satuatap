@@ -1,4 +1,5 @@
 import { hub } from "./events.js";
+import { notifyHomeTelegram } from "./telegram.js";
 
 export type NotifyMessage = {
   title: string;
@@ -7,9 +8,10 @@ export type NotifyMessage = {
 };
 
 /**
- * Deliver a notification to a unit's members. Currently fans out over SSE so the
- * web app can toast it in real time. Phase F extends this to also push to
- * Telegram for members who linked their chat.
+ * Deliver a notification to a unit's members: fan out over SSE for the web app
+ * to toast in real time, and push to Telegram for members who linked their chat.
+ * Telegram delivery is fire-and-forget so it never blocks or breaks the caller
+ * (e.g. the ingest path).
  */
 export async function notify(homeId: string, msg: NotifyMessage): Promise<void> {
   hub.publish({
@@ -19,4 +21,5 @@ export async function notify(homeId: string, msg: NotifyMessage): Promise<void> 
     ts: new Date().toISOString(),
   });
   console.log(JSON.stringify({ msg: "notify", homeId, title: msg.title, tag: msg.tag }));
+  void notifyHomeTelegram(homeId, msg).catch(() => {});
 }

@@ -85,6 +85,19 @@ model User {
   auditLogs    AuditLog[]
   acknowledged Alert[]      @relation("AlertAck")
   commands     Command[]
+  telegram     TelegramLink?
+}
+
+// Links a user to their Telegram chat so notifications can be pushed there.
+// The user opens t.me/<bot>?start=<linkCode>; the bot webhook binds chatId.
+model TelegramLink {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId    String?
+  username  String?
+  linkCode  String   @unique
+  linked    Boolean  @default(false)
+  updatedAt DateTime @updatedAt
 }
 
 model Organization {
