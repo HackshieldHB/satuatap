@@ -23,8 +23,28 @@ import {
   generateInvoiceBodySchema,
   createPassBodySchema,
   verifyAccessBodySchema,
+  createAnnouncementBodySchema,
+  createTicketBodySchema,
+  updateTicketBodySchema,
+  bookAmenityBodySchema,
+  createParcelBodySchema,
   type DeviceTypeId,
 } from "@satu-atap/shared";
+import {
+  listAnnouncements,
+  createAnnouncement,
+  createTicket,
+  listHomeTickets,
+  listBuildingTickets,
+  updateTicketStatus,
+  listAmenities,
+  bookAmenity,
+  listHomeBookings,
+  cancelBooking,
+  createParcel,
+  listHomeParcels,
+  pickupParcel,
+} from "./community.js";
 import {
   createPass,
   revokePass,
@@ -1760,4 +1780,170 @@ export async function registerRoutes(app: FastifyInstance) {
     const res = await verifyAndUnlock(homeId, parsed.data.code);
     return { success: true, data: res };
   });
+
+  // ─── Community: announcements ──────────────────────────────────────────────
+
+  app.get("/v1/homes/:homeId/announcements", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const home = await prisma.home.findUnique({ where: { id: homeId }, select: { buildingId: true } });
+    if (!home?.buildingId) return { success: true, data: [] };
+    return { success: true, data: await listAnnouncements(home.buildingId) };
+  });
+
+  app.post(
+    "/v1/buildings/:buildingId/announcements",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { buildingId } = req.params as { buildingId: string };
+      if (!(await canManageBuilding(req.user.sub, buildingId))) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
+      }
+      const parsed = createAnnouncementBodySchema.safeParse(req.body);
+      if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+      const a = await createAnnouncement(buildingId, req.user.sub, parsed.data);
+      await audit(req.user.sub, "announcement.create", "Announcement", a.id, { buildingId });
+      return { success: true, data: a };
+    }
+  );
+
+  // ─── Community: tickets (complaints) ───────────────────────────────────────
+
+  app.get("/v1/homes/:homeId/tickets", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await listHomeTickets(homeId) };
+  });
+
+  app.post("/v1/homes/:homeId/tickets", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const parsed = createTicketBodySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    const t = await createTicket(homeId, req.user.sub, parsed.data);
+    await audit(req.user.sub, "ticket.create", "Ticket", t.id, { homeId, category: t.category });
+    return { success: true, data: t };
+  });
+
+  app.get("/v1/buildings/:buildingId/tickets", { preHandler: authenticate }, async (req, reply) => {
+    const { buildingId } = req.params as { buildingId: string };
+    if (!(await canManageBuilding(req.user.sub, buildingId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await listBuildingTickets(buildingId) };
+  });
+
+  app.patch("/v1/tickets/:id/status", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = updateTicketBodySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    const ticket = await prisma.ticket.findUnique({ where: { id }, select: { buildingId: true } });
+    if (!ticket) return reply.code(404).send({ success: false, error: "Ticket not found" });
+    if (!ticket.buildingId || !(await canManageBuilding(req.user.sub, ticket.buildingId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const updated = await updateTicketStatus(id, parsed.data.status);
+    await audit(req.user.sub, "ticket.status", "Ticket", id, { status: parsed.data.status });
+    return { success: true, data: updated };
+  });
+
+  // ─── Community: amenities & bookings ───────────────────────────────────────
+
+  app.get("/v1/homes/:homeId/amenities", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const home = await prisma.home.findUnique({ where: { id: homeId }, select: { buildingId: true } });
+    if (!home?.buildingId) return { success: true, data: [] };
+    return { success: true, data: await listAmenities(home.buildingId) };
+  });
+
+  app.get("/v1/homes/:homeId/bookings", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await listHomeBookings(homeId) };
+  });
+
+  app.post("/v1/homes/:homeId/bookings", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const parsed = bookAmenityBodySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    try {
+      const b = await bookAmenity(parsed.data.amenityId, homeId, parsed.data.startsAt);
+      await audit(req.user.sub, "amenity.book", "AmenityBooking", b.id, { homeId });
+      return { success: true, data: b };
+    } catch (e) {
+      const err = e as { statusCode?: number; message: string };
+      return reply.code(err.statusCode ?? 500).send({ success: false, error: err.message });
+    }
+  });
+
+  app.post(
+    "/v1/homes/:homeId/bookings/:id/cancel",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { homeId, id } = req.params as { homeId: string; id: string };
+      if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
+      }
+      try {
+        return { success: true, data: await cancelBooking(homeId, id) };
+      } catch (e) {
+        const err = e as { statusCode?: number; message: string };
+        return reply.code(err.statusCode ?? 500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  // ─── Community: parcels (locker) ───────────────────────────────────────────
+
+  app.get("/v1/homes/:homeId/parcels", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await listHomeParcels(homeId) };
+  });
+
+  app.post("/v1/homes/:homeId/parcels", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    // Guard/manager logs an arrival; a resident (USER) may also record their own.
+    if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const parsed = createParcelBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    const p = await createParcel(homeId, parsed.data);
+    await audit(req.user.sub, "parcel.create", "Parcel", p.id, { homeId });
+    return { success: true, data: p };
+  });
+
+  app.post(
+    "/v1/homes/:homeId/parcels/:id/pickup",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { homeId, id } = req.params as { homeId: string; id: string };
+      if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
+      }
+      try {
+        return { success: true, data: await pickupParcel(homeId, id) };
+      } catch (e) {
+        const err = e as { statusCode?: number; message: string };
+        return reply.code(err.statusCode ?? 500).send({ success: false, error: err.message });
+      }
+    }
+  );
 }

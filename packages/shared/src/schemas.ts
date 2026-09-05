@@ -186,6 +186,35 @@ export const generateInvoiceBodySchema = z.object({
     .optional(),
 });
 
+// ─── Community ───────────────────────────────────────────────────────────────
+
+export const createAnnouncementBodySchema = z.object({
+  title: z.string().min(1).max(120),
+  body: z.string().min(1).max(2000),
+  category: z.enum(["info", "maintenance", "event", "urgent"]).default("info"),
+  pinned: z.boolean().default(false),
+});
+
+export const createTicketBodySchema = z.object({
+  category: z.enum(["plumbing", "electrical", "cleanliness", "security", "other"]).default("other"),
+  title: z.string().min(1).max(120),
+  description: z.string().min(1).max(2000),
+});
+
+export const updateTicketBodySchema = z.object({
+  status: z.enum(["open", "in_progress", "resolved"]),
+});
+
+export const bookAmenityBodySchema = z.object({
+  amenityId: z.string().min(1),
+  startsAt: z.string().datetime(),
+});
+
+export const createParcelBodySchema = z.object({
+  courier: z.string().max(80).optional(),
+  description: z.string().max(120).optional(),
+});
+
 // ─── Access control ──────────────────────────────────────────────────────────
 
 export const createPassBodySchema = z.object({

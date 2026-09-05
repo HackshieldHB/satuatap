@@ -4,16 +4,29 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useHomes } from "@/hooks/useHomes";
 import { billingService, type BuildingUnit } from "@/services/billing.service";
+import { communityService, type Ticket, type TicketStatus } from "@/services/community.service";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Building2, PowerOff, Wallet, RefreshCw } from "lucide-react";
+import { Building2, PowerOff, Wallet, RefreshCw, Wrench } from "lucide-react";
+
+const NEXT_STATUS: Record<TicketStatus, TicketStatus | null> = {
+  open: "in_progress",
+  in_progress: "resolved",
+  resolved: null,
+};
+const STATUS_LABEL: Record<TicketStatus, string> = {
+  open: "Terbuka",
+  in_progress: "Diproses",
+  resolved: "Selesai",
+};
 
 export default function ManagePage() {
   const { session } = useAuth();
   const homes = useHomes();
   const [buildingId, setBuildingId] = useState<string | null>(null);
   const [units, setUnits] = useState<BuildingUnit[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -35,10 +48,22 @@ export default function ManagePage() {
 
   const refresh = useCallback(async () => {
     if (!buildingId) return;
-    const res = await billingService.getBuildingUnits(buildingId);
-    if (res.success && res.data) setUnits(res.data);
-    else if (!res.success) setUnits([]);
+    const [u, t] = await Promise.all([
+      billingService.getBuildingUnits(buildingId),
+      communityService.getBuildingTickets(buildingId),
+    ]);
+    if (u.success && u.data) setUnits(u.data);
+    else if (!u.success) setUnits([]);
+    if (t.success && t.data) setTickets(t.data);
+    else if (!t.success) setTickets([]);
   }, [buildingId]);
+
+  async function advanceTicket(t: Ticket) {
+    const next = NEXT_STATUS[t.status];
+    if (!next) return;
+    const res = await communityService.updateTicketStatus(t.id, next);
+    if (res.success && res.data) setTickets((prev) => prev.map((x) => (x.id === t.id ? res.data! : x)));
+  }
 
   useEffect(() => {
     void refresh();
@@ -170,6 +195,44 @@ export default function ManagePage() {
             </tbody>
           </table>
         </div>
+      </Card>
+
+      {/* Complaint triage */}
+      <Card className="p-4">
+        <p className="font-semibold mb-3 flex items-center gap-2">
+          <Wrench className="h-4 w-4" /> Komplain penghuni
+        </p>
+        {tickets.filter((t) => t.status !== "resolved").length === 0 ? (
+          <p className="text-sm text-muted">Tidak ada komplain terbuka.</p>
+        ) : (
+          <ul className="space-y-2">
+            {tickets
+              .filter((t) => t.status !== "resolved")
+              .map((t) => (
+                <li key={t.id} className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {t.title} <span className="text-xs text-muted">· {t.homeName ?? t.homeId}</span>
+                    </p>
+                    <p className="text-xs text-muted">{t.description}</p>
+                    <span
+                      className={cn(
+                        "mt-1 inline-block rounded-full px-2 py-0.5 text-xs",
+                        t.status === "open" ? "bg-warning/10 text-warning" : "bg-primary/10 text-primary"
+                      )}
+                    >
+                      {STATUS_LABEL[t.status]}
+                    </span>
+                  </div>
+                  {NEXT_STATUS[t.status] && (
+                    <Button size="sm" variant="outline" onClick={() => advanceTicket(t)}>
+                      → {STATUS_LABEL[NEXT_STATUS[t.status]!]}
+                    </Button>
+                  )}
+                </li>
+              ))}
+          </ul>
+        )}
       </Card>
     </div>
   );

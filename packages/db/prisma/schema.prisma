@@ -124,6 +124,8 @@ model Building {
   floors  Floor[]
   homes   Home[]
   vendors Vendor[]
+  announcements Announcement[]
+  amenities     Amenity[]
 }
 
 model Floor {
@@ -167,6 +169,9 @@ model Home {
   invoices         Invoice[]
   accessPasses     AccessPass[]
   accessLogs       AccessLog[]
+  tickets          Ticket[]
+  amenityBookings  AmenityBooking[]
+  parcels          Parcel[]
 }
 
 model Membership {
@@ -492,6 +497,87 @@ model PrepaidTransaction {
   createdAt       DateTime @default(now())
 
   @@index([homeId, createdAt])
+}
+
+// ─── Community (announcements, tickets, amenities, parcels) ───────────────────
+
+model Announcement {
+  id          String   @id @default(cuid())
+  buildingId  String
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  category    String   @default("info") // info | maintenance | event | urgent
+  pinned      Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([buildingId, createdAt])
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+}
+
+// A resident complaint / maintenance request routed to the building manager.
+model Ticket {
+  id          String       @id @default(cuid())
+  homeId      String
+  home        Home         @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  buildingId  String?
+  category    String       // plumbing | electrical | cleanliness | security | other
+  title       String
+  description String
+  status      TicketStatus @default(open)
+  createdById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([homeId, createdAt])
+  @@index([buildingId, status])
+}
+
+model Amenity {
+  id          String           @id
+  buildingId  String
+  building    Building         @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  name        String
+  emoji       String           @default("🏸")
+  openHour    Int              @default(6)
+  closeHour   Int              @default(22)
+  slotMinutes Int              @default(60)
+  bookings    AmenityBooking[]
+}
+
+model AmenityBooking {
+  id        String   @id @default(cuid())
+  amenityId String
+  amenity   Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+  homeId    String
+  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  startsAt  DateTime
+  endsAt    DateTime
+  status    String   @default("booked") // booked | cancelled
+  createdAt DateTime @default(now())
+
+  @@unique([amenityId, startsAt])
+  @@index([amenityId, startsAt])
+}
+
+model Parcel {
+  id          String    @id @default(cuid())
+  homeId      String
+  home        Home      @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  courier     String    @default("")
+  description String    @default("Paket")
+  code        String
+  status      String    @default("arrived") // arrived | picked_up
+  arrivedAt   DateTime  @default(now())
+  pickedUpAt  DateTime?
+
+  @@index([homeId, status])
 }
 
 // ─── Access control (guest passes + door log) ────────────────────────────────

@@ -147,6 +147,36 @@ async function main() {
     });
   }
 
+  // Community: shared amenities + a welcome announcement per building.
+  for (const buildingId of ["building-1", "building-2"] as const) {
+    const suffix = buildingId === "building-1" ? "a" : "b";
+    const amenities = [
+      { id: `gym-${suffix}`, name: "Gym", emoji: "🏋️", openHour: 6, closeHour: 22 },
+      { id: `hall-${suffix}`, name: "Aula Serbaguna", emoji: "🎉", openHour: 8, closeHour: 21 },
+      { id: `pool-${suffix}`, name: "Kolam Renang", emoji: "🏊", openHour: 7, closeHour: 20 },
+    ];
+    for (const a of amenities) {
+      await prisma.amenity.upsert({
+        where: { id: a.id },
+        update: { name: a.name, emoji: a.emoji, openHour: a.openHour, closeHour: a.closeHour },
+        create: { id: a.id, buildingId, ...a, slotMinutes: 60 },
+      });
+    }
+    const annId = `welcome-${suffix}`;
+    await prisma.announcement.upsert({
+      where: { id: annId },
+      update: {},
+      create: {
+        id: annId,
+        buildingId,
+        title: "Selamat datang di Satu Atap",
+        body: "Pantau listrik & air, bayar tagihan, pesan dari kios, dan urus tamu — semua dari satu aplikasi.",
+        category: "info",
+        pinned: true,
+      },
+    });
+  }
+
   const rooms = [
     { id: "room-1", homeId: "home-1", name: "Ruang Tamu" },
     { id: "room-2", homeId: "home-1", name: "Kamar Tidur" },
