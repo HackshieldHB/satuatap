@@ -163,6 +163,7 @@ model Home {
   utilityConfig    UtilityConfig?
   alertThresholds  AlertThreshold[]
   orders           Order[]
+  prepaidAccount   PrepaidAccount?
 }
 
 model Membership {
@@ -449,6 +450,44 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ─── Prepaid utility wallet (opt-in per unit) ────────────────────────────────
+
+// A prepaid balance in IDR that covers a unit's metered electricity + water.
+// Opt-in: when `enabled`, telemetry deltas are priced with UtilityConfig tariffs
+// and deducted from `balanceIdr`. When the balance runs out, the configured
+// relay/valve devices are auto-cut (TURN_OFF) via the normal command pipeline
+// and reconnected (TURN_ON) on the next top-up — the PLN-token model extended
+// to water. Units that leave `enabled` false are billed postpaid instead.
+model PrepaidAccount {
+  homeId                   String   @id
+  home                     Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  enabled                  Boolean  @default(false)
+  balanceIdr               Decimal  @default(0) @db.Decimal(14, 2)
+  lowBalanceThresholdIdr   Int      @default(20000)
+  // Devices driven when the balance hits zero / is topped up. Null = no cut for
+  // that utility (monitoring only). These are on_off relay/valve devices.
+  electricityRelayDeviceId String?
+  waterValveDeviceId       String?
+  disconnected             Boolean  @default(false)
+  lowNotifiedAt            DateTime?
+  updatedAt                DateTime @updatedAt
+  transactions             PrepaidTransaction[]
+}
+
+model PrepaidTransaction {
+  id              String   @id @default(cuid())
+  homeId          String
+  account         PrepaidAccount @relation(fields: [homeId], references: [homeId], onDelete: Cascade)
+  kind            String   // topup | usage | adjustment
+  amountIdr       Decimal  @db.Decimal(14, 2) // positive = credit, negative = debit
+  balanceAfterIdr Decimal  @db.Decimal(14, 2)
+  description     String   @default("")
+  meta            Json?
+  createdAt       DateTime @default(now())
+
+  @@index([homeId, createdAt])
 }
 
 // ─── Commerce (in-building marketplace / kiosk) ──────────────────────────────

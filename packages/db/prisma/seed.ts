@@ -124,6 +124,28 @@ async function main() {
     });
   }
 
+  // Prepaid wallets (opt-in, disabled by default). Disconnect targets point at
+  // the lighting-node relay (electricity proxy for the demo) and the main water
+  // valve. update:{} so re-seeding never clobbers a unit's runtime balance/toggle.
+  const prepaidTargets = [
+    { homeId: "home-1", electricityRelayDeviceId: "light-living-room", waterValveDeviceId: "valve-main" },
+    { homeId: "home-2", electricityRelayDeviceId: "light-living-room-b", waterValveDeviceId: "valve-main-b" },
+  ];
+  for (const p of prepaidTargets) {
+    await prisma.prepaidAccount.upsert({
+      where: { homeId: p.homeId },
+      update: {},
+      create: {
+        homeId: p.homeId,
+        enabled: false,
+        balanceIdr: 0,
+        lowBalanceThresholdIdr: 20000,
+        electricityRelayDeviceId: p.electricityRelayDeviceId,
+        waterValveDeviceId: p.waterValveDeviceId,
+      },
+    });
+  }
+
   const rooms = [
     { id: "room-1", homeId: "home-1", name: "Ruang Tamu" },
     { id: "room-2", homeId: "home-1", name: "Kamar Tidur" },

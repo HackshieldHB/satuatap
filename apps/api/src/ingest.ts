@@ -6,6 +6,7 @@ import {
   type CounterMetric,
 } from "@satu-atap/shared";
 import { evaluateAutomations } from "./automation.js";
+import { applyPrepaidUsage } from "./prepaid.js";
 import { hub } from "./events.js";
 
 function hourStart(d: Date): Date {
@@ -253,6 +254,10 @@ export async function ingestTelemetry(input: {
   });
 
   await upsertHourlyAggregates({ ...input, metrics });
+
+  // Prepaid units are debited for the priced usage in this reading; this may
+  // auto-disconnect the unit at zero balance. No-op for postpaid units.
+  await applyPrepaidUsage(input.homeId, metrics);
 
   hub.publish({
     event: input.source === "state" ? "DEVICE_STATE_UPDATED" : "DEVICE_TELEMETRY_UPDATED",

@@ -17,6 +17,7 @@ import {
   Sparkles,
   Building2,
   Store,
+  Wallet,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -34,6 +35,7 @@ export const MAIN_NAV: NavItem[] = [
   { href: "/compare", label: "Bandingkan", icon: Building2 },
   { href: "/services", label: "Layanan", icon: LayoutGrid },
   { href: "/kiosk", label: "Kios (Operator)", icon: Store },
+  { href: "/prepaid", label: "Prabayar", icon: Wallet },
   { href: "/payments", label: "Pembayaran", icon: CreditCard },
   { href: "/notifications", label: "Notifikasi", icon: Activity },
 ];

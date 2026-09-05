@@ -17,8 +17,11 @@ import {
   deviceStatusPayloadSchema,
   createOrderBodySchema,
   updateOrderStatusBodySchema,
+  prepaidTopupBodySchema,
+  prepaidConfigBodySchema,
   type DeviceTypeId,
 } from "@satu-atap/shared";
+import { getPrepaidStatus, topupPrepaid } from "./prepaid.js";
 import { authenticate, requireHomeRole, requireInternalKey, audit } from "./auth.js";
 import {
   ingestTelemetry,
@@ -1490,5 +1493,91 @@ export async function registerRoutes(app: FastifyInstance) {
     const mapped = mapOrder(order);
     hub.publish({ event: "order.updated", homeId: order.homeId, data: { order: mapped }, ts: new Date().toISOString() });
     return { success: true, data: mapped };
+  });
+
+  // ─── Prepaid utility wallet (opt-in per unit) ──────────────────────────────
+
+  app.get("/v1/homes/:homeId/prepaid", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "VIEWER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const status = await getPrepaidStatus(homeId);
+    return { success: true, data: status };
+  });
+
+  app.post("/v1/homes/:homeId/prepaid/config", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const parsed = prepaidConfigBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: "Invalid payload" });
+    }
+    // Validate any device targets belong to this unit and are actuators.
+    for (const key of ["electricityRelayDeviceId", "waterValveDeviceId"] as const) {
+      const id = parsed.data[key];
+      if (id) {
+        const device = await prisma.device.findFirst({
+          where: { id, homeId },
+          include: { capabilities: true },
+        });
+        if (!device || !device.capabilities.some((c) => c.capability === "on_off")) {
+          return reply.code(400).send({ success: false, error: `Perangkat pemutus (${key}) tidak valid.` });
+        }
+      }
+    }
+    await prisma.prepaidAccount.upsert({
+      where: { homeId },
+      update: {
+        ...(parsed.data.enabled !== undefined ? { enabled: parsed.data.enabled } : {}),
+        ...(parsed.data.lowBalanceThresholdIdr !== undefined
+          ? { lowBalanceThresholdIdr: parsed.data.lowBalanceThresholdIdr }
+          : {}),
+        ...(parsed.data.electricityRelayDeviceId !== undefined
+          ? { electricityRelayDeviceId: parsed.data.electricityRelayDeviceId }
+          : {}),
+        ...(parsed.data.waterValveDeviceId !== undefined
+          ? { waterValveDeviceId: parsed.data.waterValveDeviceId }
+          : {}),
+      },
+      create: {
+        homeId,
+        enabled: parsed.data.enabled ?? false,
+        lowBalanceThresholdIdr: parsed.data.lowBalanceThresholdIdr ?? 20000,
+        electricityRelayDeviceId: parsed.data.electricityRelayDeviceId ?? null,
+        waterValveDeviceId: parsed.data.waterValveDeviceId ?? null,
+      },
+    });
+    await audit(req.user.sub, "prepaid.config", "PrepaidAccount", homeId, parsed.data);
+    const status = await getPrepaidStatus(homeId);
+    return { success: true, data: status };
+  });
+
+  app.post("/v1/homes/:homeId/prepaid/topup", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId, "USER"))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const parsed = prepaidTopupBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: "Invalid payload" });
+    }
+    try {
+      // Simulated payment: the top-up settles immediately (QRIS/VA/etc. are
+      // demo-only, no real gateway), then credits the wallet.
+      await topupPrepaid(homeId, parsed.data.amountIdr, {
+        paymentChannel: parsed.data.paymentChannel,
+      });
+      await audit(req.user.sub, "prepaid.topup", "PrepaidAccount", homeId, {
+        amountIdr: parsed.data.amountIdr,
+      });
+      const status = await getPrepaidStatus(homeId);
+      return { success: true, data: status };
+    } catch (e) {
+      const err = e as { statusCode?: number; message: string };
+      return reply.code(err.statusCode ?? 500).send({ success: false, error: err.message });
+    }
   });
 }

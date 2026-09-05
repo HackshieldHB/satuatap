@@ -173,6 +173,36 @@ export const createOrderBodySchema = z.object({
 
 export const updateOrderStatusBodySchema = z.object({ status: orderStatusSchema });
 
+// ─── Prepaid utility wallet ──────────────────────────────────────────────────
+
+export const prepaidTopupBodySchema = z.object({
+  amountIdr: z.number().int().min(1000).max(5_000_000),
+  paymentChannel: paymentChannelSchema.default("qris"),
+});
+
+export const prepaidConfigBodySchema = z.object({
+  enabled: z.boolean().optional(),
+  lowBalanceThresholdIdr: z.number().int().min(0).max(1_000_000).optional(),
+  electricityRelayDeviceId: z.string().nullable().optional(),
+  waterValveDeviceId: z.string().nullable().optional(),
+});
+
+/**
+ * Price a telemetry window's metered usage in IDR from tariffs. Water tariff is
+ * per m³ but the meter reports litres, so litres are converted (÷1000). Shared
+ * so the API deduction path and any UI estimate agree on the exact arithmetic.
+ */
+export function priceUsageIdr(input: {
+  energyKwh: number;
+  waterLiters: number;
+  electricityTariffPerKwh: number;
+  waterTariffPerM3: number;
+}): number {
+  const energyCost = Math.max(0, input.energyKwh) * input.electricityTariffPerKwh;
+  const waterCost = (Math.max(0, input.waterLiters) / 1000) * input.waterTariffPerM3;
+  return energyCost + waterCost;
+}
+
 export type TelemetryPayload = z.infer<typeof telemetryPayloadSchema>;
 export type TelemetryMetrics = z.infer<typeof telemetryMetricsSchema>;
 export type CommandType = z.infer<typeof commandTypeSchema>;
