@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { AppRole } from "@/types";
 import {
   Home,
   Cpu,
@@ -25,32 +26,45 @@ import {
   CalendarCheck,
   Package,
   Send,
+  Wrench,
 } from "lucide-react";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon };
+// `roles` limits an item to those personas; omitted = visible to everyone.
+export type NavItem = { href: string; label: string; icon: LucideIcon; roles?: AppRole[] };
+
+const RESIDENT: AppRole[] = ["resident"];
+const MANAGER: AppRole[] = ["manager"];
+const RES_MGR: AppRole[] = ["resident", "manager"];
+const MGR_OP: AppRole[] = ["manager", "operator"];
+const OPERATOR: AppRole[] = ["operator", "manager"];
 
 export const MAIN_NAV: NavItem[] = [
   { href: "/", label: "Beranda", icon: Home },
+  // Manager / operator
+  { href: "/manage", label: "Pengelola", icon: ClipboardList, roles: MANAGER },
+  { href: "/operator", label: "Maintenance", icon: Wrench, roles: OPERATOR },
+  { href: "/compare", label: "Bandingkan", icon: Building2, roles: MANAGER },
+  // Monitoring
   { href: "/devices", label: "Perangkat", icon: Cpu },
-  { href: "/rooms", label: "Ruangan", icon: DoorOpen },
-  { href: "/environment", label: "Lingkungan", icon: Thermometer },
-  { href: "/energy", label: "Energi", icon: Zap },
-  { href: "/water", label: "Air", icon: Droplets },
-  { href: "/alerts", label: "Peringatan", icon: Bell },
-  { href: "/ai", label: "Otomatisasi", icon: Bot },
-  { href: "/insights", label: "Wawasan AI", icon: Sparkles },
-  { href: "/system", label: "Sistem", icon: Server },
-  { href: "/access", label: "Akses & Tamu", icon: KeyRound },
-  { href: "/community", label: "Komunitas", icon: Megaphone },
-  { href: "/amenities", label: "Fasilitas", icon: CalendarCheck },
-  { href: "/parcels", label: "Paket & Loker", icon: Package },
-  { href: "/compare", label: "Bandingkan", icon: Building2 },
-  { href: "/services", label: "Layanan", icon: LayoutGrid },
-  { href: "/kiosk", label: "Kios (Operator)", icon: Store },
-  { href: "/prepaid", label: "Prabayar", icon: Wallet },
-  { href: "/invoices", label: "Tagihan", icon: Receipt },
-  { href: "/manage", label: "Pengelola", icon: ClipboardList },
-  { href: "/payments", label: "Pembayaran", icon: CreditCard },
+  { href: "/rooms", label: "Ruangan", icon: DoorOpen, roles: RESIDENT },
+  { href: "/environment", label: "Lingkungan", icon: Thermometer, roles: RES_MGR },
+  { href: "/energy", label: "Energi", icon: Zap, roles: RES_MGR },
+  { href: "/water", label: "Air", icon: Droplets, roles: RES_MGR },
+  { href: "/alerts", label: "Peringatan", icon: Bell, roles: MGR_OP },
+  { href: "/ai", label: "Otomatisasi", icon: Bot, roles: RES_MGR },
+  { href: "/insights", label: "Wawasan AI", icon: Sparkles, roles: RES_MGR },
+  { href: "/system", label: "Sistem", icon: Server, roles: MGR_OP },
+  // Resident services
+  { href: "/access", label: "Akses & Tamu", icon: KeyRound, roles: RESIDENT },
+  { href: "/community", label: "Komunitas", icon: Megaphone, roles: RES_MGR },
+  { href: "/amenities", label: "Fasilitas", icon: CalendarCheck, roles: RESIDENT },
+  { href: "/parcels", label: "Paket & Loker", icon: Package, roles: RESIDENT },
+  { href: "/services", label: "Layanan", icon: LayoutGrid, roles: RESIDENT },
+  { href: "/kiosk", label: "Kios (Operator)", icon: Store, roles: RES_MGR },
+  { href: "/prepaid", label: "Prabayar", icon: Wallet, roles: RESIDENT },
+  { href: "/invoices", label: "Tagihan", icon: Receipt, roles: RESIDENT },
+  { href: "/payments", label: "Pembayaran", icon: CreditCard, roles: RESIDENT },
+  // Common
   { href: "/notifications", label: "Notifikasi", icon: Activity },
   { href: "/telegram", label: "Telegram", icon: Send },
 ];
@@ -67,6 +81,15 @@ export const MOBILE_NAV: NavItem[] = [
   { href: "/ai", label: "AI", icon: Sparkles },
   { href: "/profile", label: "Profil", icon: User },
 ];
+
+/**
+ * Filter nav items for a persona. A missing role (e.g. a session created before
+ * roles existed) shows everything, so no menu ever silently vanishes.
+ */
+export function navForRole(items: NavItem[], role: AppRole | null | undefined): NavItem[] {
+  if (!role) return items;
+  return items.filter((i) => !i.roles || i.roles.includes(role));
+}
 
 /**
  * Determine whether a nav item should render as active for the current path.

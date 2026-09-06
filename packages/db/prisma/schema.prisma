@@ -35,6 +35,16 @@ enum MembershipRole {
   VIEWER
 }
 
+// App-level persona that drives which menu a user sees. Distinct from the
+// per-home MembershipRole (which governs data access): `manager` runs the
+// building console, `operator` is the maintenance technician, `resident` is a
+// unit occupant.
+enum UserRole {
+  resident
+  manager
+  operator
+}
+
 enum CommandStatus {
   PENDING
   SENT
@@ -78,6 +88,7 @@ model User {
   passwordHash String
   fullName     String
   phone        String?
+  role         UserRole @default(resident)
   createdAt    DateTime @default(now())
 
   ownedHomes   Home[]       @relation("HomeOwner")
@@ -230,6 +241,8 @@ model Device {
   config          Json?
   claimToken      String?
   isOn            Boolean?
+  underMaintenance Boolean           @default(false)
+  maintenanceNote  String?
   createdAt       DateTime           @default(now())
 
   @@index([nodeId])

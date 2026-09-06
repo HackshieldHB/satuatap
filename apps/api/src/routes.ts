@@ -29,8 +29,17 @@ import {
   bookAmenityBodySchema,
   createParcelBodySchema,
   bindTelegramBodySchema,
+  setRoleBodySchema,
+  deviceMaintenanceBodySchema,
   type DeviceTypeId,
 } from "@satu-atap/shared";
+import {
+  canOperate,
+  listBuildingMaintenance,
+  setDeviceMaintenance,
+  resolveDeviceAlerts,
+  deviceBuildingId,
+} from "./maintenance.js";
 import {
   listAnnouncements,
   createAnnouncement,
@@ -212,6 +221,7 @@ export async function registerRoutes(app: FastifyInstance) {
           fullName: user.fullName,
           email: user.email,
           phone: user.phone ?? "",
+          role: user.role,
           createdAt: user.createdAt.toISOString(),
         },
         onboardingCompleted: true,
@@ -229,9 +239,21 @@ export async function registerRoutes(app: FastifyInstance) {
         fullName: user.fullName,
         email: user.email,
         phone: user.phone ?? "",
+        role: user.role,
         createdAt: user.createdAt.toISOString(),
       },
     };
+  });
+
+  // Demo affordance: switch the current user's app role to preview each menu.
+  app.post("/v1/auth/role", { preHandler: authenticate }, async (req, reply) => {
+    const parsed = setRoleBodySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    const user = await prisma.user.update({
+      where: { id: req.user.sub },
+      data: { role: parsed.data.role },
+    });
+    return { success: true, data: { role: user.role } };
   });
 
   app.get("/v1/homes", { preHandler: authenticate }, async (req) => {
@@ -2003,4 +2025,44 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post("/v1/telegram/webhook", async (req) => {
     return await tgWebhook(req.body ?? {});
   });
+
+  // ─── Operator: maintenance / faulty devices ────────────────────────────────
+
+  app.get("/v1/buildings/:buildingId/maintenance", { preHandler: authenticate }, async (req, reply) => {
+    const { buildingId } = req.params as { buildingId: string };
+    if (!(await canOperate(req.user.sub, buildingId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    return { success: true, data: await listBuildingMaintenance(buildingId) };
+  });
+
+  app.patch("/v1/devices/:deviceId/maintenance", { preHandler: authenticate }, async (req, reply) => {
+    const { deviceId } = req.params as { deviceId: string };
+    const parsed = deviceMaintenanceBodySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    const buildingId = await deviceBuildingId(deviceId);
+    if (!buildingId || !(await canOperate(req.user.sub, buildingId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const d = await setDeviceMaintenance(deviceId, parsed.data.underMaintenance, parsed.data.note);
+    await audit(req.user.sub, "device.maintenance", "Device", deviceId, {
+      underMaintenance: parsed.data.underMaintenance,
+    });
+    return { success: true, data: d };
+  });
+
+  app.post(
+    "/v1/devices/:deviceId/maintenance/resolve-alerts",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { deviceId } = req.params as { deviceId: string };
+      const buildingId = await deviceBuildingId(deviceId);
+      if (!buildingId || !(await canOperate(req.user.sub, buildingId))) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
+      }
+      const res = await resolveDeviceAlerts(deviceId, req.user.sub);
+      await audit(req.user.sub, "device.resolve_alerts", "Device", deviceId, res);
+      return { success: true, data: res };
+    }
+  );
 }

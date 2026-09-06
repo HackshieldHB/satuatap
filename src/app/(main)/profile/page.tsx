@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import {
   Settings,
@@ -42,10 +43,17 @@ const menu = [
   { href: "/notifications", label: "Notifikasi", icon: Bell },
 ];
 
+const ROLE_OPTIONS: { role: import("@/types").AppRole; label: string }[] = [
+  { role: "resident", label: "Penghuni" },
+  { role: "manager", label: "Pengelola" },
+  { role: "operator", label: "Operator" },
+];
+
 export default function ProfilePage() {
-  const { user, session, logout } = useAuth();
+  const { user, session, logout, setRole } = useAuth();
   const router = useRouter();
   const { showToast } = useToast();
+  const [switching, setSwitching] = useState(false);
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -77,6 +85,40 @@ export default function ProfilePage() {
           <p className="text-base font-semibold truncate">{user?.fullName}</p>
           <p className="text-sm text-muted truncate">{user?.email}</p>
           <p className="text-xs text-muted mt-0.5">{user?.phone}</p>
+        </div>
+      </Card>
+
+      {/* Role switcher (demo): flips the menu between the three personas. */}
+      <Card padding="lg" className="space-y-3">
+        <div>
+          <p className="text-sm font-semibold">Peran / Tampilan Menu</p>
+          <p className="text-xs text-muted">Ganti peran untuk melihat menu Penghuni, Pengelola, atau Operator.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {ROLE_OPTIONS.map((opt) => {
+            const active = (user?.role ?? "resident") === opt.role;
+            return (
+              <button
+                key={opt.role}
+                disabled={switching}
+                onClick={async () => {
+                  setSwitching(true);
+                  try {
+                    await setRole(opt.role);
+                    showToast(`Peran: ${opt.label}`, "success");
+                  } finally {
+                    setSwitching(false);
+                  }
+                }}
+                className={cn(
+                  "rounded-full border px-4 py-1.5 text-sm transition-colors",
+                  active ? "border-primary bg-primary/10 text-primary font-medium" : "border-border text-muted hover:text-foreground"
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
       </Card>
 

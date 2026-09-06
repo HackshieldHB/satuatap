@@ -8,7 +8,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import type { AuthSession, User } from "@/types";
+import type { AuthSession, User, AppRole } from "@/types";
 import { authService } from "@/services/auth.service";
 
 interface AuthContextValue {
@@ -20,6 +20,7 @@ interface AuthContextValue {
   logout: () => void;
   refreshSession: () => void;
   updateSelectedHome: (homeId: string) => void;
+  setRole: (role: AppRole) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -48,6 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshSession();
   }, [refreshSession]);
 
+  const setRole = useCallback(async (role: AppRole) => {
+    const res = await authService.setRole(role);
+    if (res.success) refreshSession();
+  }, [refreshSession]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -59,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refreshSession,
         updateSelectedHome,
+        setRole,
       }}
     >
       {children}

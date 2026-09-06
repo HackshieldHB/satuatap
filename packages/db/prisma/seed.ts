@@ -19,14 +19,29 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "kevin.santoso@gmail.com" },
-    update: { passwordHash },
+    update: { passwordHash, role: "manager" },
     create: {
       id: "user-1",
       email: "kevin.santoso@gmail.com",
       passwordHash,
       fullName: "Kevin Santoso",
       phone: "081234567890",
+      role: "manager",
     },
+  });
+
+  // Demo personas so each menu can be shown by logging in per role. All use the
+  // same password123. Kevin (user-1) is the manager and can also switch role in
+  // the app to preview any menu.
+  await prisma.user.upsert({
+    where: { email: "warga@satuatap.id" },
+    update: { passwordHash, role: "resident" },
+    create: { id: "user-resident", email: "warga@satuatap.id", passwordHash, fullName: "Warga Demo", phone: "081200000001", role: "resident" },
+  });
+  await prisma.user.upsert({
+    where: { email: "teknisi@satuatap.id" },
+    update: { passwordHash, role: "operator" },
+    create: { id: "user-operator", email: "teknisi@satuatap.id", passwordHash, fullName: "Teknisi Demo", phone: "081200000002", role: "operator" },
   });
 
   await prisma.organization.upsert({
@@ -122,6 +137,21 @@ async function main() {
         serviceChargeIdr: 250000, // IPL / iuran pengelolaan per bulan
         currency: "IDR",
       },
+    });
+  }
+
+  // Demo persona memberships: resident lives in home-1; operator services both
+  // buildings (VIEWER membership grants the maintenance console its scope).
+  await prisma.membership.upsert({
+    where: { userId_homeId: { userId: "user-resident", homeId: "home-1" } },
+    update: { role: "USER" },
+    create: { userId: "user-resident", homeId: "home-1", role: "USER" },
+  });
+  for (const homeId of ["home-1", "home-2"] as const) {
+    await prisma.membership.upsert({
+      where: { userId_homeId: { userId: "user-operator", homeId } },
+      update: { role: "VIEWER" },
+      create: { userId: "user-operator", homeId, role: "VIEWER" },
     });
   }
 

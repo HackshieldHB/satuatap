@@ -82,12 +82,15 @@ export type HomeStatusType =
 
 // ─── Models ──────────────────────────────────────────────────────
 
+export type AppRole = "resident" | "manager" | "operator";
+
 export interface User {
   id: string;
   fullName: string;
   email: string;
   phone: string;
   avatarUrl?: string;
+  role?: AppRole;
   createdAt: string;
 }
 

@@ -4,6 +4,7 @@ import type {
   AuthSession,
   ApiResponse,
   OnboardingData,
+  AppRole,
 } from "@/types";
 import { DEMO_CREDENTIALS, MOCK_USER } from "@/data/mock";
 import { delay } from "@/lib/utils";
@@ -178,6 +179,20 @@ export class AuthService {
     const session = this.getStoredSession();
     if (!session) return;
     this.saveSession({ ...session, selectedHomeId: homeId });
+  }
+
+  // Demo: switch the current user's app role (persisted server-side) and mirror
+  // it into the stored session so the menu updates immediately.
+  async setRole(role: AppRole): Promise<ApiResponse<{ role: AppRole }>> {
+    const res = await apiFetch<{ role: AppRole }>("/v1/auth/role", {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    });
+    if (res.success && res.data) {
+      const session = this.getStoredSession();
+      if (session) this.saveSession({ ...session, user: { ...session.user, role: res.data.role } });
+    }
+    return res;
   }
 }
 

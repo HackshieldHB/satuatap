@@ -4,14 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { computeActive, MAIN_NAV, BOTTOM_NAV, MOBILE_NAV } from "@/lib/nav";
+import { computeActive, MAIN_NAV, BOTTOM_NAV, MOBILE_NAV, navForRole } from "@/lib/nav";
+import { useAuth } from "@/hooks/useAuth";
 import { Logo } from "./Logo";
 import { useState } from "react";
 
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const mainNav = navForRole(MAIN_NAV, user?.role);
 
   const isActive = (href: string) => computeActive(href, pathname);
 
@@ -38,7 +41,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
-        {MAIN_NAV.map((item) => {
+        {mainNav.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
           return (

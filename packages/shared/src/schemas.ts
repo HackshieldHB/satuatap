@@ -215,6 +215,17 @@ export const createParcelBodySchema = z.object({
   description: z.string().max(120).optional(),
 });
 
+// ─── Roles & maintenance ─────────────────────────────────────────────────────
+
+export const userRoleSchema = z.enum(["resident", "manager", "operator"]);
+
+export const setRoleBodySchema = z.object({ role: userRoleSchema });
+
+export const deviceMaintenanceBodySchema = z.object({
+  underMaintenance: z.boolean(),
+  note: z.string().max(300).optional(),
+});
+
 // ─── Telegram notifications ──────────────────────────────────────────────────
 
 export const bindTelegramBodySchema = z.object({
