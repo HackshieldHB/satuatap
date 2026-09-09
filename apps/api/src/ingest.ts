@@ -225,10 +225,6 @@ export async function ingestTelemetry(input: {
   }
 
   if (typeof metrics.on === "boolean") {
-    await prisma.device.update({
-      where: { id: input.deviceId },
-      data: { isOn: metrics.on },
-    });
     await prisma.lightingState.upsert({
       where: { deviceId: input.deviceId },
       update: {
@@ -250,6 +246,7 @@ export async function ingestTelemetry(input: {
       lastSeen: input.recordedAt,
       lastHeartbeat: input.recordedAt,
       status: "online",
+      ...(typeof metrics.on === "boolean" ? { isOn: metrics.on } : {}),
     },
   });
 
@@ -358,17 +355,18 @@ async function upsertHourlyAggregates(input: {
     });
   };
 
+  const jobs: Promise<void>[] = [];
   for (const metric of COUNTER_METRICS) {
     const value = input.metrics[metric];
-    if (typeof value === "number") await upsert(metric, "counter", value);
+    if (typeof value === "number") jobs.push(upsert(metric, "counter", value));
     const delta = input.metrics[`${metric}_delta`];
-    if (typeof delta === "number") await upsert(`${metric}_delta`, "delta", delta);
+    if (typeof delta === "number") jobs.push(upsert(`${metric}_delta`, "delta", delta));
   }
-
   for (const metric of INSTANT_METRICS) {
     const value = input.metrics[metric];
-    if (typeof value === "number") await upsert(metric, "instant", value);
+    if (typeof value === "number") jobs.push(upsert(metric, "instant", value));
   }
+  await Promise.all(jobs);
 }
 
 export async function applyDeviceStatus(input: {
@@ -498,17 +496,19 @@ export async function applyNodeAvailability(input: {
   const transitioningOffline =
     input.status === "offline" && devices.some((d) => d.status !== "offline");
 
-  for (const device of devices) {
-    await applyDeviceStatus({
-      homeId: input.homeId,
-      deviceId: device.id,
-      status: input.status,
-      ip: input.ip,
-      firmware: input.firmware,
-      rssi: input.rssi,
-      raiseAlert: false,
-    });
-  }
+  await Promise.all(
+    devices.map((device) =>
+      applyDeviceStatus({
+        homeId: input.homeId,
+        deviceId: device.id,
+        status: input.status,
+        ip: input.ip,
+        firmware: input.firmware,
+        rssi: input.rssi,
+        raiseAlert: false,
+      })
+    )
+  );
 
   if (transitioningOffline) {
     const representative = devices[0];

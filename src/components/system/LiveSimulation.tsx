@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useToast } from "@/hooks/useToast";
+import { useMockData } from "@/lib/config";
 
 const EVENTS: { message: string; type: "info" | "success" | "warning" }[] = [
   { message: "Sensor gerak terdeteksi di Dapur 👀", type: "info" },
@@ -20,6 +21,7 @@ export function LiveSimulation() {
   const idx = useRef(Math.floor(Math.random() * EVENTS.length));
 
   useEffect(() => {
+    if (!useMockData) return;
     const fire = () => {
       const e = EVENTS[idx.current % EVENTS.length];
       idx.current += 1;

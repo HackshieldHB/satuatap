@@ -67,13 +67,7 @@ export default function LoginPage() {
 
     setIsSuccess(true);
     refreshSession();
-    setTimeout(() => {
-      if (result.data?.onboardingCompleted) {
-        router.push("/");
-      } else {
-        router.push("/onboarding/welcome");
-      }
-    }, 600);
+    router.replace(result.data?.onboardingCompleted ? "/" : "/onboarding/welcome");
   };
 
   return (

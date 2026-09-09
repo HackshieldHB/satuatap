@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { UsageDetailView } from "@/components/home/UsageDetailView";
+import dynamic from "next/dynamic";
 import { EnergyBudget } from "@/components/home/EnergyBudget";
 import { ENERGY_BREAKDOWN } from "@/data/mock";
 import { formatNumber } from "@/lib/utils";
@@ -10,17 +10,29 @@ import { useAuth } from "@/hooks/useAuth";
 import { useHomeEvents } from "@/hooks/useHomeEvents";
 import { telemetryService, type EnergyDetail } from "@/services/telemetry.service";
 import { PageLoader } from "@/components/ui/LoadingSpinner";
+import { ErrorState } from "@/components/ui/ErrorState";
 import type { UsagePeriod } from "@/types";
+
+const UsageDetailView = dynamic(
+  () => import("@/components/home/UsageDetailView").then((m) => ({ default: m.UsageDetailView })),
+  { loading: () => <PageLoader /> }
+);
 
 export default function EnergyPage() {
   const { session } = useAuth();
   const homeId = session?.selectedHomeId || "home-1";
   const [period, setPeriod] = useState<UsagePeriod>("day");
   const [data, setData] = useState<EnergyDetail | null>(null);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     const res = await telemetryService.getEnergy(homeId, period);
-    if (res.success && res.data) setData(res.data);
+    if (res.success && res.data) {
+      setData(res.data);
+      setError(false);
+    } else {
+      setError(true);
+    }
   }, [homeId, period]);
 
   useEffect(() => {
@@ -29,7 +41,8 @@ export default function EnergyPage() {
 
   useHomeEvents(homeId, { onEvent: () => void load(), onPoll: () => void load() });
 
-  if (!data) return <PageLoader />;
+  if (!data && !error) return <PageLoader />;
+  if (error || !data) return <ErrorState onRetry={load} title="Gagal memuat energi" />;
 
   return (
     <UsageDetailView

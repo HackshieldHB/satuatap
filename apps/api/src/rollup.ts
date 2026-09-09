@@ -158,16 +158,18 @@ export async function rollupRange(
 }
 
 async function distinctUtcDaysFromRecentIngest(since: Date, until: Date): Promise<Date[]> {
-  const rows = await prisma.telemetryReading.findMany({
-    where: { createdAt: { gte: since, lte: until } },
-    select: { recordedAt: true },
-  });
-  const days = new Map<number, Date>();
-  for (const row of rows) {
-    const day = utcDay(row.recordedAt);
-    days.set(day.getTime(), day);
-  }
-  return [...days.values()].sort((a, b) => a.getTime() - b.getTime());
+  const rows = await prisma.$queryRaw<Array<{ d: Date }>>`
+    SELECT DISTINCT date_trunc('day', "recordedAt") AS d
+    FROM "TelemetryReading"
+    WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
+  `;
+  return rows
+    .map((r) => {
+      const x = new Date(r.d);
+      x.setUTCHours(0, 0, 0, 0);
+      return x;
+    })
+    .sort((a, b) => a.getTime() - b.getTime());
 }
 
 function catchUpWindowsForDays(

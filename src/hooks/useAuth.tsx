@@ -6,6 +6,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useMemo,
   type ReactNode,
 } from "react";
 import type { AuthSession, User, AppRole } from "@/types";
@@ -54,20 +55,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (res.success) refreshSession();
   }, [refreshSession]);
 
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      session,
+      user: session?.user ?? null,
+      isLoading,
+      isAuthenticated: !!session,
+      login: authService.login.bind(authService),
+      logout,
+      refreshSession,
+      updateSelectedHome,
+      setRole,
+    }),
+    [session, isLoading, logout, refreshSession, updateSelectedHome, setRole]
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        session,
-        user: session?.user ?? null,
-        isLoading,
-        isAuthenticated: !!session,
-        login: authService.login.bind(authService),
-        logout,
-        refreshSession,
-        updateSelectedHome,
-        setRole,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

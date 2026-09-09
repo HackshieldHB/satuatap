@@ -91,6 +91,8 @@ export function Sidebar() {
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const items = navForRole(MOBILE_NAV, user?.role);
 
   const isActive = (href: string) => computeActive(href, pathname);
 
@@ -100,7 +102,7 @@ export function BottomNav() {
       aria-label="Navigasi utama"
     >
       <div className="flex items-center justify-around h-16">
-        {MOBILE_NAV.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
           return (

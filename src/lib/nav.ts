@@ -77,18 +77,21 @@ export const BOTTOM_NAV: NavItem[] = [
 export const MOBILE_NAV: NavItem[] = [
   { href: "/", label: "Beranda", icon: Home },
   { href: "/devices", label: "Perangkat", icon: Cpu },
-  { href: "/alerts", label: "Alert", icon: Bell },
-  { href: "/ai", label: "AI", icon: Sparkles },
+  { href: "/alerts", label: "Alert", icon: Bell, roles: MGR_OP },
+  { href: "/payments", label: "Bayar", icon: CreditCard, roles: RESIDENT },
+  { href: "/ai", label: "AI", icon: Sparkles, roles: RES_MGR },
+  { href: "/operator", label: "Maint.", icon: Wrench, roles: ["operator"] },
   { href: "/profile", label: "Profil", icon: User },
 ];
 
 /**
- * Filter nav items for a persona. A missing role (e.g. a session created before
- * roles existed) shows everything, so no menu ever silently vanishes.
+ * Filter nav items for a persona. A missing/unknown role defaults to resident
+ * so manager-only items never leak, and warga vs manager menus stay distinct.
  */
 export function navForRole(items: NavItem[], role: AppRole | null | undefined): NavItem[] {
-  if (!role) return items;
-  return items.filter((i) => !i.roles || i.roles.includes(role));
+  const persona: AppRole =
+    role === "manager" || role === "operator" || role === "resident" ? role : "resident";
+  return items.filter((i) => !i.roles || i.roles.includes(persona));
 }
 
 /**

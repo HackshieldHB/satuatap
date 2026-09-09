@@ -37,9 +37,9 @@ export async function createAnnouncement(
   });
   // Fan the announcement out to every unit in the building.
   const homes = await prisma.home.findMany({ where: { buildingId }, select: { id: true } });
-  for (const h of homes) {
-    await notify(h.id, { title: `📢 ${input.title}`, body: input.body, tag: "announcement" });
-  }
+  await Promise.all(
+    homes.map((h) => notify(h.id, { title: `📢 ${input.title}`, body: input.body, tag: "announcement" }))
+  );
   return { id: a.id, title: a.title, body: a.body, category: a.category, pinned: a.pinned, createdAt: a.createdAt.toISOString() };
 }
 

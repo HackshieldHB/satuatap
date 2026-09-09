@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { homeService } from "@/services/home.service";
 import { adService } from "@/services/ad.service";
 import { useAuth } from "@/hooks/useAuth";
 import { useHomeEvents } from "@/hooks/useHomeEvents";
+import { useHomes } from "@/hooks/useHomes";
 import { getGreeting } from "@/lib/utils";
-import { MOCK_HOMES } from "@/data/mock";
 import { QUICK_ACTIONS } from "@/data/mock";
 import { DashboardHero } from "@/components/home/HomeStatusCard";
 import { QuickActions } from "@/components/home/QuickActions";
@@ -23,8 +23,10 @@ import type { DashboardData, Advertisement } from "@/types";
 
 export default function DashboardPage() {
   const { user, session } = useAuth();
+  const homes = useHomes();
   const homeId = session?.selectedHomeId || "home-1";
-  const home = MOCK_HOMES.find((h) => h.id === homeId) || MOCK_HOMES[0];
+  const homeName =
+    homes.find((h) => h.id === homeId)?.name || user?.fullName?.split(" ")[0] || "Rumah";
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [heroAds, setHeroAds] = useState<Advertisement[]>([]);
@@ -32,30 +34,40 @@ export default function DashboardPage() {
   const [recAds, setRecAds] = useState<Advertisement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const loadGen = useRef(0);
 
   const loadData = useCallback(async (silent = false) => {
+    const gen = ++loadGen.current;
     if (!silent) {
       setLoading(true);
       setError(false);
     }
     try {
-      const [dashResult, heroResult, midResult, recResult] = await Promise.all([
-        homeService.getDashboard(homeId),
-        adService.getAdsByPlacement("HOME_HERO"),
-        adService.getAdsByPlacement("HOME_MIDDLE"),
-        adService.getAdsByPlacement("HOME_RECOMMENDATION"),
-      ]);
+      const dashResult = await homeService.getDashboard(homeId);
+      if (gen !== loadGen.current) return;
+      if (dashResult.success && dashResult.data) {
+        setDashboard(dashResult.data);
+        setError(false);
+      } else if (!silent) {
+        setError(true);
+      }
+    } catch {
+      if (gen === loadGen.current && !silent) setError(true);
+    }
+    if (gen === loadGen.current && !silent) setLoading(false);
 
-      if (dashResult.success && dashResult.data) setDashboard(dashResult.data);
-      else if (!silent) setError(true);
+    if (silent) return;
 
+    void Promise.all([
+      adService.getAdsByPlacement("HOME_HERO"),
+      adService.getAdsByPlacement("HOME_MIDDLE"),
+      adService.getAdsByPlacement("HOME_RECOMMENDATION"),
+    ]).then(([heroResult, midResult, recResult]) => {
+      if (gen !== loadGen.current) return;
       if (heroResult.success && heroResult.data) setHeroAds(heroResult.data);
       if (midResult.success && midResult.data) setMiddleAds(midResult.data);
       if (recResult.success && recResult.data) setRecAds(recResult.data);
-    } catch {
-      if (!silent) setError(true);
-    }
-    if (!silent) setLoading(false);
+    });
   }, [homeId]);
 
   useEffect(() => {
@@ -82,7 +94,7 @@ export default function DashboardPage() {
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
       <DashboardHero
         greeting={getGreeting(user?.fullName?.split(" ")[0] || "User")}
-        homeName={home.name}
+        homeName={homeName}
         statusMessage={dashboard.statusMessage}
         statusType={statusType}
         energyKwh={dashboard.energy.todayKwh}

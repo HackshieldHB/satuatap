@@ -40,19 +40,27 @@ export async function getInsights(homeId: string): Promise<Insight[]> {
   const now = new Date();
   const mStart = monthStart(now);
   const mEnd = monthEnd(mStart);
+  const elapsedDays = Math.max(0.5, (now.getTime() - mStart.getTime()) / DAY_MS);
+  const daysInMonth = (mEnd.getTime() - mStart.getTime()) / DAY_MS;
+  const factor = daysInMonth / elapsedDays;
+  const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
+  const lastMStart = monthStart(new Date(Date.UTC(mStart.getUTCFullYear(), mStart.getUTCMonth() - 1, 1)));
+  const lastWindowEnd = new Date(lastMStart.getTime() + elapsedDays * DAY_MS);
+
   const tariff = await prisma.utilityConfig.findUnique({ where: { homeId } });
   const eRate = Number(tariff?.electricityTariffPerKwh ?? 0);
   const wRate = Number(tariff?.waterTariffPerM3 ?? 0);
   const ipl = tariff?.serviceChargeIdr ?? 0;
 
-  const insights: Insight[] = [];
+  const [kwhMtd, litersMtd, kwhLast, nightLiters, nightKwh] = await Promise.all([
+    sumHourlyDelta(homeId, "energy_kwh_delta", mStart, now),
+    sumHourlyDelta(homeId, "volume_liters_delta", mStart, now),
+    sumHourlyDelta(homeId, "energy_kwh_delta", lastMStart, lastWindowEnd),
+    sumInHours(homeId, "volume_liters_delta", weekAgo, now, 0, 5),
+    sumInHours(homeId, "energy_kwh_delta", weekAgo, now, 1, 5),
+  ]);
 
-  // 1) Bill forecast — extrapolate month-to-date to month end.
-  const kwhMtd = await sumHourlyDelta(homeId, "energy_kwh_delta", mStart, now);
-  const litersMtd = await sumHourlyDelta(homeId, "volume_liters_delta", mStart, now);
-  const elapsedDays = Math.max(0.5, (now.getTime() - mStart.getTime()) / DAY_MS);
-  const daysInMonth = (mEnd.getTime() - mStart.getTime()) / DAY_MS;
-  const factor = daysInMonth / elapsedDays;
+  const insights: Insight[] = [];
   const projKwh = kwhMtd * factor;
   const projLiters = litersMtd * factor;
   const projUtil = priceUsageIdr({ energyKwh: projKwh, waterLiters: projLiters, electricityTariffPerKwh: eRate, waterTariffPerM3: wRate });
@@ -68,10 +76,6 @@ export async function getInsights(homeId: string): Promise<Insight[]> {
     });
   }
 
-  // 2) Trend vs last month (same elapsed-days window).
-  const lastMStart = monthStart(new Date(Date.UTC(mStart.getUTCFullYear(), mStart.getUTCMonth() - 1, 1)));
-  const lastWindowEnd = new Date(lastMStart.getTime() + elapsedDays * DAY_MS);
-  const kwhLast = await sumHourlyDelta(homeId, "energy_kwh_delta", lastMStart, lastWindowEnd);
   if (kwhLast > 0) {
     const pct = Math.round(((kwhMtd - kwhLast) / kwhLast) * 100);
     insights.push({
@@ -83,9 +87,6 @@ export async function getInsights(homeId: string): Promise<Insight[]> {
     });
   }
 
-  // 3) Possible leak — sustained overnight water flow (00–05 UTC) over 7 days.
-  const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
-  const nightLiters = await sumInHours(homeId, "volume_liters_delta", weekAgo, now, 0, 5);
   const nightPerDay = nightLiters / 7;
   if (nightPerDay > 40) {
     insights.push({
@@ -97,8 +98,6 @@ export async function getInsights(homeId: string): Promise<Insight[]> {
     });
   }
 
-  // 4) Standby load — non-zero electricity every night hour.
-  const nightKwh = await sumInHours(homeId, "energy_kwh_delta", weekAgo, now, 1, 5);
   const standbyPerNight = nightKwh / 7;
   if (standbyPerNight > 1.5) {
     insights.push({
@@ -118,11 +117,13 @@ export async function getLeaderboard(buildingId: string) {
   const homes = await prisma.home.findMany({ where: { buildingId }, select: { id: true, name: true } });
   const mStart = monthStart();
   const now = new Date();
-  const rows = [];
-  for (const h of homes) {
-    const kwh = await sumHourlyDelta(h.id, "energy_kwh_delta", mStart, now);
-    rows.push({ homeId: h.id, name: h.name, kwh: Math.round(kwh * 100) / 100 });
-  }
+  const rows = await Promise.all(
+    homes.map(async (h) => ({
+      homeId: h.id,
+      name: h.name,
+      kwh: Math.round((await sumHourlyDelta(h.id, "energy_kwh_delta", mStart, now)) * 100) / 100,
+    }))
+  );
   rows.sort((a, b) => a.kwh - b.kwh);
   const maxKwh = Math.max(1, ...rows.map((r) => r.kwh));
   return rows.map((r, i) => ({

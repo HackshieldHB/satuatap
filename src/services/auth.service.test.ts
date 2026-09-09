@@ -14,6 +14,7 @@ describe("authService", () => {
     });
     expect(res.success).toBe(true);
     expect(res.data?.user.email).toBe(DEMO_CREDENTIALS.email);
+    expect(res.data?.user.role).toBe("manager");
   });
 
   it("rejects a wrong password", async () => {

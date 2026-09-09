@@ -19,7 +19,7 @@ export function MobileHeader() {
   const [showHomePicker, setShowHomePicker] = useState(false);
 
   const selectedHomeId = session?.selectedHomeId || "home-1";
-  const selectedHome = homes.find((h) => h.id === selectedHomeId) || homes[0];
+  const selectedHome = homes.find((h) => h.id === selectedHomeId);
 
   return (
     <>
@@ -32,7 +32,7 @@ export function MobileHeader() {
             className="flex items-center gap-1.5 rounded-md bg-background px-3 py-1.5 text-sm font-medium max-w-[140px]"
             aria-label="Pilih rumah"
           >
-            <span className="truncate">{selectedHome.name}</span>
+            <span className="truncate">{selectedHome?.name ?? "Rumah"}</span>
             <ChevronDown className="h-4 w-4 shrink-0 text-muted" />
           </button>
 
@@ -108,7 +108,7 @@ export function DesktopHeader() {
   const [open, setOpen] = useState(false);
 
   const selectedHomeId = session?.selectedHomeId || "home-1";
-  const selectedHome = homes.find((h) => h.id === selectedHomeId) || homes[0];
+  const selectedHome = homes.find((h) => h.id === selectedHomeId);
 
   return (
     <header className="hidden lg:flex items-center justify-between gap-4 h-16 px-6 border-b border-border bg-surface">
@@ -119,7 +119,7 @@ export function DesktopHeader() {
           className="flex items-center gap-2 rounded-md bg-background px-3 py-1.5 text-sm font-medium hover:bg-background/70"
         >
           <Building2 className="h-4 w-4 text-primary" />
-          <span className="truncate max-w-[180px]">{selectedHome?.name}</span>
+          <span className="truncate max-w-[180px]">{selectedHome?.name ?? "Rumah"}</span>
           <ChevronDown className="h-4 w-4 text-muted" />
         </button>
         {open && (
@@ -150,13 +150,15 @@ export function DesktopHeader() {
                   {h.id === selectedHomeId && <Check className="h-4 w-4 shrink-0" />}
                 </button>
               ))}
-              <Link
-                href="/compare"
-                onClick={() => setOpen(false)}
-                className="mt-1 block w-full border-t border-border py-2 text-center text-sm font-medium text-primary"
-              >
-                Bandingkan gedung →
-              </Link>
+              {user?.role === "manager" && (
+                <Link
+                  href="/compare"
+                  onClick={() => setOpen(false)}
+                  className="mt-1 block w-full border-t border-border py-2 text-center text-sm font-medium text-primary"
+                >
+                  Bandingkan gedung →
+                </Link>
+              )}
             </div>
           </>
         )}

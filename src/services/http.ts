@@ -3,7 +3,10 @@ import { setLocalMode } from "@/lib/local-mode";
 import type { ApiResponse } from "@/types";
 
 const STORAGE_KEY = "huni_session";
-const CLOUD_TIMEOUT_MS = 2000;
+// Dev + Cloudflare tunnel add RTT; 2s was aborting dashboard/login before the
+// API finished, so the UI showed a failed/empty load. Edge stays short.
+const CLOUD_TIMEOUT_MS = 10_000;
+const EDGE_TIMEOUT_MS = 3_000;
 
 function token(): string | null {
   if (typeof window === "undefined") return null;
@@ -61,7 +64,7 @@ export async function apiFetch<T>(
     throw new Error(json.error ?? `HTTP ${res.status}`);
   } catch {
     try {
-      const res = await fetchTimeout(`${edgeBaseUrl}${edgePath(path)}`, { ...init, headers }, CLOUD_TIMEOUT_MS);
+      const res = await fetchTimeout(`${edgeBaseUrl}${edgePath(path)}`, { ...init, headers }, EDGE_TIMEOUT_MS);
       const json = (await res.json()) as ApiResponse<T> & { error?: string };
       if (!res.ok) {
         return { success: false, error: json.error ?? `HTTP ${res.status}` };

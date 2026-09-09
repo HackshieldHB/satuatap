@@ -36,6 +36,7 @@ export const MOCK_USER: User = {
   email: "kevin.santoso@gmail.com",
   phone: "081234567890",
   avatarUrl: undefined,
+  role: "manager",
   createdAt: "2025-06-15T08:00:00Z",
 };
 

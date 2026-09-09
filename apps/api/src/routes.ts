@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
-import { prisma, type Prisma } from "@satu-atap/db";
+import { prisma, Prisma } from "@satu-atap/db";
 import {
   DEFAULT_CAPABILITIES,
   createAutomationBodySchema,
@@ -94,6 +94,7 @@ import { hub, type AppEvent } from "./events.js";
 import { mapHome, mapRoom, mapDeviceForUi } from "./mappers.js";
 import { config } from "./config.js";
 import { periodWindow } from "./rollup.js";
+import { sumDeltaMetric } from "./telemetry-sum.js";
 
 function startOfUtcDay(d = new Date()): Date {
   const x = new Date(d);
@@ -120,22 +121,21 @@ async function latestMetrics(deviceId: string) {
   return (row?.metrics as Record<string, unknown> | undefined) ?? null;
 }
 
-async function sumDeltaMetric(
-  homeId: string,
-  deltaKey: string,
-  from: Date,
-  to: Date
-): Promise<number> {
-  const rows = await prisma.telemetryReading.findMany({
-    where: { homeId, recordedAt: { gte: from, lt: to } },
-    select: { metrics: true },
-  });
-  let sum = 0;
+async function latestMetricsForDevices(
+  deviceIds: string[]
+): Promise<Map<string, Record<string, unknown> | null>> {
+  const map = new Map<string, Record<string, unknown> | null>();
+  if (deviceIds.length === 0) return map;
+  const rows = await prisma.$queryRaw<Array<{ deviceId: string; metrics: Prisma.JsonValue }>>`
+    SELECT DISTINCT ON ("deviceId") "deviceId", metrics
+    FROM "TelemetryReading"
+    WHERE "deviceId" IN (${Prisma.join(deviceIds)})
+    ORDER BY "deviceId", "recordedAt" DESC
+  `;
   for (const r of rows) {
-    const v = (r.metrics as Record<string, unknown>)[deltaKey];
-    if (typeof v === "number") sum += v;
+    map.set(r.deviceId, (r.metrics as Record<string, unknown> | null) ?? null);
   }
-  return sum;
+  return map;
 }
 
 async function powerStats(
@@ -152,17 +152,18 @@ async function powerStats(
     },
   });
   if (rows.length === 0) {
-    const readings = await prisma.telemetryReading.findMany({
-      where: { homeId, recordedAt: { gte: from, lt: to } },
-      select: { metrics: true },
-    });
-    const powers = readings
-      .map((r) => (r.metrics as Record<string, unknown>).power)
-      .filter((v): v is number => typeof v === "number");
-    if (powers.length === 0) return { peak: 0, average: 0 };
+    const raw = await prisma.$queryRaw<Array<{ peak: number | string | null; average: number | string | null }>>`
+      SELECT
+        COALESCE(MAX((metrics->>'power')::double precision), 0) AS peak,
+        COALESCE(AVG((metrics->>'power')::double precision), 0) AS average
+      FROM "TelemetryReading"
+      WHERE "homeId" = ${homeId}
+        AND "recordedAt" >= ${from}
+        AND "recordedAt" < ${to}
+    `;
     return {
-      peak: Math.max(...powers),
-      average: powers.reduce((a, b) => a + b, 0) / powers.length,
+      peak: Number(raw[0]?.peak ?? 0),
+      average: Number(raw[0]?.average ?? 0),
     };
   }
   return {
@@ -300,21 +301,20 @@ export async function registerRoutes(app: FastifyInstance) {
       where: { homeId },
       include: { devices: true },
     });
-    const data = [];
-    for (const r of rooms) {
+    const allDeviceIds = rooms.flatMap((r) => r.devices.map((d) => d.id));
+    const metricsByDevice = await latestMetricsForDevices(allDeviceIds);
+    const data = rooms.map((r) => {
       let temperature: number | undefined;
       for (const d of r.devices) {
-        const m = await latestMetrics(d.id);
+        const m = metricsByDevice.get(d.id);
         if (typeof m?.temperature_c === "number") temperature = m.temperature_c;
       }
-      data.push(
-        mapRoom(r, {
-          deviceCount: r.devices.length,
-          activeDevices: r.devices.filter((d) => d.status === "online").length,
-          temperature,
-        })
-      );
-    }
+      return mapRoom(r, {
+        deviceCount: r.devices.length,
+        activeDevices: r.devices.filter((d) => d.status === "online").length,
+        temperature,
+      });
+    });
     return { success: true, data };
   });
 
@@ -330,10 +330,8 @@ export async function registerRoutes(app: FastifyInstance) {
       where: { homeId },
       include: { capabilities: true, room: true, lighting: true },
     });
-    let items = [];
-    for (const d of devices) {
-      items.push(mapDeviceForUi(d, await latestMetrics(d.id)));
-    }
+    const metricsByDevice = await latestMetricsForDevices(devices.map((d) => d.id));
+    let items = devices.map((d) => mapDeviceForUi(d, metricsByDevice.get(d.id) ?? null));
     switch (q.filter) {
       case "online":
         items = items.filter((d) => d.status === "online");
@@ -529,46 +527,61 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!(await requireHomeRole(req.user.sub, homeId))) {
       return reply.code(403).send({ success: false, error: "Forbidden" });
     }
-    const period = ((req.query as { period?: string }).period ?? "day") as "day" | "week" | "month";
+    const q = req.query as { period?: string; compact?: string };
+    const period = (q.period ?? "day") as "day" | "week" | "month";
+    const compact = q.compact === "1";
     const now = new Date();
     const window = periodWindow(period === "week" || period === "month" ? period : "day", now);
-    const tariff = await prisma.utilityConfig.findUnique({ where: { homeId } });
-    const rate = Number(tariff?.electricityTariffPerKwh ?? 0);
     const todayStart = startOfUtcDay();
     const yesterdayStart = new Date(todayStart);
     yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
-    const consumption = await sumDeltaMetric(homeId, "energy_kwh_delta", window.start, window.end);
-    const todayKwh = await sumDeltaMetric(homeId, "energy_kwh_delta", todayStart, new Date());
-    const yesterdayKwh = await sumDeltaMetric(homeId, "energy_kwh_delta", yesterdayStart, todayStart);
-    const { peak, average } = await powerStats(homeId, window.start, window.end);
+    const [tariff, consumption, todayKwh, yesterdayKwh, stats] = await Promise.all([
+      prisma.utilityConfig.findUnique({ where: { homeId } }),
+      sumDeltaMetric(homeId, "energy_kwh_delta", window.start, window.end),
+      sumDeltaMetric(homeId, "energy_kwh_delta", todayStart, new Date()),
+      sumDeltaMetric(homeId, "energy_kwh_delta", yesterdayStart, todayStart),
+      compact ? Promise.resolve({ peak: 0, average: 0 }) : powerStats(homeId, window.start, window.end),
+    ]);
+    const rate = Number(tariff?.electricityTariffPerKwh ?? 0);
+    const { peak, average } = stats;
     const comparisonPercent =
       yesterdayKwh > 0 ? Math.round((Math.abs(todayKwh - yesterdayKwh) / yesterdayKwh) * 100) : 0;
-    const history = [];
-    if (period === "week" || period === "month") {
-      const cursor = new Date(window.start);
-      while (cursor < window.end && cursor < now) {
-        const end = new Date(cursor);
-        end.setUTCDate(end.getUTCDate() + 1);
-        history.push({
-          label: cursor.toISOString().slice(5, 10),
-          value: Number((await sumDeltaMetric(homeId, "energy_kwh_delta", cursor, end)).toFixed(2)),
-        });
-        cursor.setUTCDate(cursor.getUTCDate() + 1);
-      }
-    } else {
-      for (const d of dayLabels()) {
-        const end = new Date(d.start);
-        end.setUTCDate(end.getUTCDate() + 1);
-        history.push({
-          label: d.label,
-          value: Number((await sumDeltaMetric(homeId, "energy_kwh_delta", d.start, end)).toFixed(2)),
-        });
+    let history: { label: string; value: number }[] = [];
+    if (!compact) {
+      if (period === "week" || period === "month") {
+        const slices: { start: Date; end: Date; label: string }[] = [];
+        const cursor = new Date(window.start);
+        while (cursor < window.end && cursor < now) {
+          const end = new Date(cursor);
+          end.setUTCDate(end.getUTCDate() + 1);
+          slices.push({ start: new Date(cursor), end, label: cursor.toISOString().slice(5, 10) });
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+        history = await Promise.all(
+          slices.map(async (s) => ({
+            label: s.label,
+            value: Number((await sumDeltaMetric(homeId, "energy_kwh_delta", s.start, s.end)).toFixed(2)),
+          }))
+        );
+      } else {
+        history = await Promise.all(
+          dayLabels().map(async (d) => {
+            const end = new Date(d.start);
+            end.setUTCDate(end.getUTCDate() + 1);
+            return {
+              label: d.label,
+              value: Number((await sumDeltaMetric(homeId, "energy_kwh_delta", d.start, end)).toFixed(2)),
+            };
+          })
+        );
       }
     }
-    const latest = await prisma.telemetryReading.findFirst({
-      where: { homeId, device: { type: "energy_meter" } },
-      orderBy: { recordedAt: "desc" },
-    });
+    const latest = compact
+      ? null
+      : await prisma.telemetryReading.findFirst({
+          where: { homeId, device: { type: "energy_meter" } },
+          orderBy: { recordedAt: "desc" },
+        });
     const metrics = (latest?.metrics as Record<string, number> | undefined) ?? {};
     return {
       success: true,
@@ -603,49 +616,65 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!(await requireHomeRole(req.user.sub, homeId))) {
       return reply.code(403).send({ success: false, error: "Forbidden" });
     }
-    const period = ((req.query as { period?: string }).period ?? "day") as "day" | "week" | "month";
+    const q = req.query as { period?: string; compact?: string };
+    const period = (q.period ?? "day") as "day" | "week" | "month";
+    const compact = q.compact === "1";
     const now = new Date();
     const window = periodWindow(period === "week" || period === "month" ? period : "day", now);
-    const tariff = await prisma.utilityConfig.findUnique({ where: { homeId } });
-    const rateM3 = Number(tariff?.waterTariffPerM3 ?? 0);
     const todayStart = startOfUtcDay();
     const yesterdayStart = new Date(todayStart);
     yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
-    const consumption = await sumDeltaMetric(homeId, "volume_liters_delta", window.start, window.end);
-    const todayLiters = await sumDeltaMetric(homeId, "volume_liters_delta", todayStart, new Date());
-    const yesterday = await sumDeltaMetric(homeId, "volume_liters_delta", yesterdayStart, todayStart);
+    const [tariff, consumption, todayLiters, yesterday] = await Promise.all([
+      prisma.utilityConfig.findUnique({ where: { homeId } }),
+      sumDeltaMetric(homeId, "volume_liters_delta", window.start, window.end),
+      sumDeltaMetric(homeId, "volume_liters_delta", todayStart, new Date()),
+      sumDeltaMetric(homeId, "volume_liters_delta", yesterdayStart, todayStart),
+    ]);
+    const rateM3 = Number(tariff?.waterTariffPerM3 ?? 0);
     const comparisonPercent =
       yesterday > 0 ? Math.round((Math.abs(todayLiters - yesterday) / yesterday) * 100) : 0;
-    const history = [];
-    if (period === "week" || period === "month") {
-      const cursor = new Date(window.start);
-      while (cursor < window.end && cursor < now) {
-        const end = new Date(cursor);
-        end.setUTCDate(end.getUTCDate() + 1);
-        history.push({
-          label: cursor.toISOString().slice(5, 10),
-          value: Math.round(await sumDeltaMetric(homeId, "volume_liters_delta", cursor, end)),
-        });
-        cursor.setUTCDate(cursor.getUTCDate() + 1);
-      }
-    } else {
-      for (const d of dayLabels()) {
-        const end = new Date(d.start);
-        end.setUTCDate(end.getUTCDate() + 1);
-        history.push({
-          label: d.label,
-          value: Math.round(await sumDeltaMetric(homeId, "volume_liters_delta", d.start, end)),
-        });
+    let history: { label: string; value: number }[] = [];
+    if (!compact) {
+      if (period === "week" || period === "month") {
+        const slices: { start: Date; end: Date; label: string }[] = [];
+        const cursor = new Date(window.start);
+        while (cursor < window.end && cursor < now) {
+          const end = new Date(cursor);
+          end.setUTCDate(end.getUTCDate() + 1);
+          slices.push({ start: new Date(cursor), end, label: cursor.toISOString().slice(5, 10) });
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+        history = await Promise.all(
+          slices.map(async (s) => ({
+            label: s.label,
+            value: Math.round(await sumDeltaMetric(homeId, "volume_liters_delta", s.start, s.end)),
+          }))
+        );
+      } else {
+        history = await Promise.all(
+          dayLabels().map(async (d) => {
+            const end = new Date(d.start);
+            end.setUTCDate(end.getUTCDate() + 1);
+            return {
+              label: d.label,
+              value: Math.round(await sumDeltaMetric(homeId, "volume_liters_delta", d.start, end)),
+            };
+          })
+        );
       }
     }
-    const latest = await prisma.telemetryReading.findFirst({
-      where: { homeId, device: { type: "water_meter" } },
-      orderBy: { recordedAt: "desc" },
-    });
+    const latest = compact
+      ? null
+      : await prisma.telemetryReading.findFirst({
+          where: { homeId, device: { type: "water_meter" } },
+          orderBy: { recordedAt: "desc" },
+        });
     const metrics = (latest?.metrics as Record<string, number> | undefined) ?? {};
-    const flowRows = await prisma.telemetryAggregate.findMany({
-      where: { homeId, metric: "flow_lpm", period: "hour", periodStart: { gte: window.start, lt: window.end } },
-    });
+    const flowRows = compact
+      ? []
+      : await prisma.telemetryAggregate.findMany({
+          where: { homeId, metric: "flow_lpm", period: "hour", periodStart: { gte: window.start, lt: window.end } },
+        });
     const peak = flowRows.length ? Math.max(...flowRows.map((r) => r.max)) : Number(metrics.flow_lpm ?? 0);
     const average = flowRows.length
       ? flowRows.reduce((a, r) => a + r.avg * r.sampleCount, 0) / Math.max(1, flowRows.reduce((a, r) => a + r.sampleCount, 0))
@@ -697,50 +726,55 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!(await requireHomeRole(req.user.sub, homeId))) {
       return reply.code(403).send({ success: false, error: "Forbidden" });
     }
-    const [energyRes, waterRes, envRes, devices] = await Promise.all([
-      (async () => {
-        const fake = { user: req.user };
-        return fake;
-      })(),
-      Promise.resolve(null),
-      Promise.resolve(null),
-      prisma.device.findMany({
-        where: { homeId },
-        include: { capabilities: true, room: true, lighting: true },
-      }),
-    ]);
-    void energyRes;
-    void waterRes;
-    void envRes;
+    const now = new Date();
+    const todayStart = startOfUtcDay(now);
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
+    const [tariff, todayKwh, yesterdayKwh, todayLiters, yesterdayLiters, envLatest, deviceRows, activity] =
+      await Promise.all([
+        prisma.utilityConfig.findUnique({ where: { homeId } }),
+        sumDeltaMetric(homeId, "energy_kwh_delta", todayStart, now),
+        sumDeltaMetric(homeId, "energy_kwh_delta", yesterdayStart, todayStart),
+        sumDeltaMetric(homeId, "volume_liters_delta", todayStart, now),
+        sumDeltaMetric(homeId, "volume_liters_delta", yesterdayStart, todayStart),
+        prisma.telemetryReading.findFirst({
+          where: { homeId, device: { type: "environment_sensor" } },
+          orderBy: { recordedAt: "desc" },
+        }),
+        prisma.device.findMany({
+          where: { homeId },
+          select: { id: true, status: true },
+        }),
+        prisma.command.findMany({
+          where: { homeId },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          include: { device: true },
+        }),
+      ]);
+    const envMetrics = (envLatest?.metrics as Record<string, number> | undefined) ?? {};
+    const rate = Number(tariff?.electricityTariffPerKwh ?? 0);
+    const rateM3 = Number(tariff?.waterTariffPerM3 ?? 0);
+    const energyCmp =
+      yesterdayKwh > 0 ? Math.round((Math.abs(todayKwh - yesterdayKwh) / yesterdayKwh) * 100) : 0;
+    const waterCmp =
+      yesterdayLiters > 0 ? Math.round((Math.abs(todayLiters - yesterdayLiters) / yesterdayLiters) * 100) : 0;
 
-    const online = devices.filter((d) => d.status === "online").length;
-    const offline = devices.filter((d) => d.status === "offline").length;
-    const featured = [];
-    for (const d of devices.slice(0, 3)) {
-      featured.push(mapDeviceForUi(d, await latestMetrics(d.id)));
-    }
-
-    const energy = (await app.inject({
-      method: "GET",
-      url: `/v1/homes/${homeId}/energy`,
-      headers: { authorization: req.headers.authorization },
-    })).json();
-    const water = (await app.inject({
-      method: "GET",
-      url: `/v1/homes/${homeId}/water`,
-      headers: { authorization: req.headers.authorization },
-    })).json();
-    const environment = (await app.inject({
-      method: "GET",
-      url: `/v1/homes/${homeId}/environment`,
-      headers: { authorization: req.headers.authorization },
-    })).json();
-
-    const activity = await prisma.command.findMany({
-      where: { homeId },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-      include: { device: true },
+    const online = deviceRows.filter((d) => d.status === "online").length;
+    const offline = deviceRows.filter((d) => d.status === "offline").length;
+    const featuredIds = deviceRows.slice(0, 3).map((d) => d.id);
+    const featuredDevices =
+      featuredIds.length === 0
+        ? []
+        : await prisma.device.findMany({
+            where: { id: { in: featuredIds } },
+            include: { capabilities: true, room: true, lighting: true },
+          });
+    const featuredById = new Map(featuredDevices.map((d) => [d.id, d]));
+    const featuredMetrics = await latestMetricsForDevices(featuredIds);
+    const featured = featuredIds.flatMap((id) => {
+      const d = featuredById.get(id);
+      return d ? [mapDeviceForUi(d, featuredMetrics.get(id) ?? null)] : [];
     });
 
     return {
@@ -748,9 +782,26 @@ export async function registerRoutes(app: FastifyInstance) {
       data: {
         homeStatus: offline > 0 ? "devices_offline" : "normal",
         statusMessage: offline > 0 ? `${offline} perangkat offline` : "Semua terlihat baik",
-        energy: energy.data,
-        water: water.data,
-        environment: environment.data,
+        energy: {
+          homeId,
+          todayKwh: Number(todayKwh.toFixed(2)),
+          estimatedCost: Math.round(todayKwh * rate),
+          comparisonPercent: energyCmp,
+          comparisonDirection: todayKwh >= yesterdayKwh ? "up" : "down",
+        },
+        water: {
+          homeId,
+          todayLiters: Math.round(todayLiters),
+          estimatedCost: Math.round((todayLiters / 1000) * rateM3),
+          comparisonPercent: waterCmp,
+          comparisonDirection: todayLiters >= yesterdayLiters ? "up" : "down",
+        },
+        environment: {
+          homeId,
+          temperature: envMetrics.temperature_c ?? 0,
+          humidity: envMetrics.humidity_pct ?? 0,
+          airQuality: "good" as const,
+        },
         aiInsight: {
           id: "ai-live",
           homeId,
@@ -1206,20 +1257,40 @@ export async function registerRoutes(app: FastifyInstance) {
       source?: "telemetry" | "state";
       payload: unknown;
     }> }).items ?? [];
-    let accepted = 0;
+    const accepted = { n: 0 };
+    const byDevice = new Map<
+      string,
+      Array<{
+        homeId: string;
+        deviceId: string;
+        recordedAt: Date;
+        metrics: Record<string, unknown>;
+        source: "telemetry" | "state";
+      }>
+    >();
     for (const item of items.slice(0, 500)) {
       const parsed = telemetryPayloadSchema.safeParse(item.payload);
       if (!parsed.success) continue;
-      const result = await ingestTelemetry({
+      const row = {
         homeId: item.homeId,
         deviceId: item.deviceId,
         recordedAt: new Date(parsed.data.ts),
         metrics: parsed.data.metrics,
-        source: item.source === "state" ? "state" : "telemetry",
-      });
-      if (result.ok) accepted += 1;
+        source: (item.source === "state" ? "state" : "telemetry") as "telemetry" | "state",
+      };
+      const list = byDevice.get(item.deviceId) ?? [];
+      list.push(row);
+      byDevice.set(item.deviceId, list);
     }
-    return { success: true, data: { accepted } };
+    await Promise.all(
+      [...byDevice.values()].map(async (group) => {
+        for (const row of group) {
+          const result = await ingestTelemetry(row);
+          if (result.ok) accepted.n += 1;
+        }
+      })
+    );
+    return { success: true, data: { accepted: accepted.n } };
   });
 
   app.post("/internal/events/batch", async (req, reply) => {

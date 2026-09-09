@@ -4,7 +4,8 @@ import { useEffect, useRef } from "react";
 import { apiBaseUrl, useMockData } from "@/lib/config";
 
 const STORAGE_KEY = "huni_session";
-const POLL_MS = 15_000;
+const POLL_MS = 30_000;
+const REFRESH_DEBOUNCE_MS = 8_000;
 
 export type HomeStreamEvent = {
   event: string;
@@ -46,6 +47,7 @@ export function useHomeEvents(
     let source: EventSource | null = null;
     let pollTimer: ReturnType<typeof setInterval> | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
 
     const stopPoll = () => {
@@ -55,10 +57,28 @@ export function useHomeEvents(
       }
     };
 
+    const scheduleRefresh = (kind: "event" | "poll") => {
+      if (closed || refreshTimer) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = undefined;
+        if (closed) return;
+        if (kind === "event") {
+          handlersRef.current.onEvent({
+            event: "coalesced",
+            homeId,
+            data: {},
+            ts: new Date().toISOString(),
+          });
+        } else {
+          handlersRef.current.onPoll();
+        }
+      }, REFRESH_DEBOUNCE_MS);
+    };
+
     const startPoll = () => {
       if (pollTimer || closed) return;
       pollTimer = setInterval(() => {
-        if (!closed) handlersRef.current.onPoll();
+        if (!closed) scheduleRefresh("poll");
       }, POLL_MS);
     };
 
@@ -67,6 +87,7 @@ export function useHomeEvents(
       return () => {
         closed = true;
         stopPoll();
+        if (refreshTimer) clearTimeout(refreshTimer);
       };
     }
 
@@ -83,13 +104,8 @@ export function useHomeEvents(
       source.onopen = () => {
         failures = 0;
       };
-      source.onmessage = (msg) => {
-        try {
-          const parsed = JSON.parse(msg.data) as HomeStreamEvent;
-          handlersRef.current.onEvent(parsed);
-        } catch {
-          // ignore malformed frames
-        }
+      source.onmessage = () => {
+        scheduleRefresh("event");
       };
       source.onerror = () => {
         source?.close();
@@ -112,6 +128,7 @@ export function useHomeEvents(
       source = null;
       stopPoll();
       if (retryTimer) clearTimeout(retryTimer);
+      if (refreshTimer) clearTimeout(refreshTimer);
     };
   }, [homeId]);
 }

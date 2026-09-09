@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { UsageDetailView } from "@/components/home/UsageDetailView";
+import dynamic from "next/dynamic";
 import { WATER_BREAKDOWN } from "@/data/mock";
 import { formatNumber } from "@/lib/utils";
 import { Droplets } from "lucide-react";
@@ -9,17 +9,29 @@ import { useAuth } from "@/hooks/useAuth";
 import { useHomeEvents } from "@/hooks/useHomeEvents";
 import { telemetryService, type WaterDetail } from "@/services/telemetry.service";
 import { PageLoader } from "@/components/ui/LoadingSpinner";
+import { ErrorState } from "@/components/ui/ErrorState";
 import type { UsagePeriod } from "@/types";
+
+const UsageDetailView = dynamic(
+  () => import("@/components/home/UsageDetailView").then((m) => ({ default: m.UsageDetailView })),
+  { loading: () => <PageLoader /> }
+);
 
 export default function WaterPage() {
   const { session } = useAuth();
   const homeId = session?.selectedHomeId || "home-1";
   const [period, setPeriod] = useState<UsagePeriod>("day");
   const [data, setData] = useState<WaterDetail | null>(null);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     const res = await telemetryService.getWater(homeId, period);
-    if (res.success && res.data) setData(res.data);
+    if (res.success && res.data) {
+      setData(res.data);
+      setError(false);
+    } else {
+      setError(true);
+    }
   }, [homeId, period]);
 
   useEffect(() => {
@@ -28,7 +40,8 @@ export default function WaterPage() {
 
   useHomeEvents(homeId, { onEvent: () => void load(), onPoll: () => void load() });
 
-  if (!data) return <PageLoader />;
+  if (!data && !error) return <PageLoader />;
+  if (error || !data) return <ErrorState onRetry={load} title="Gagal memuat air" />;
 
   return (
     <UsageDetailView

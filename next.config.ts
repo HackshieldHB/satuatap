@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   // Allow the app to be reached through a Cloudflare quick tunnel in dev
   // (used for sharing a mobile test link). Harmless in production.
   allowedDevOrigins: ["*.trycloudflare.com"],
+  // Tree-shake lucide/recharts so the webpack/turbopack graph stays smaller.
+  experimental: {
+    optimizePackageImports: ["lucide-react", "recharts"],
+  },
   // All imagery is self-hosted under /public — no remote image hosts needed.
 
   // Proxy the cloud API same-origin so a single tunnel serves the whole app:

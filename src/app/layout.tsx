@@ -3,11 +3,6 @@ import { Inter } from "next/font/google";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ToastProvider } from "@/hooks/useToast";
 import { ThemeProvider } from "@/hooks/useTheme";
-import { NotificationProvider } from "@/hooks/useNotifications";
-import { CartProvider } from "@/hooks/useCart";
-import { OrdersProvider } from "@/hooks/useOrders";
-import { RewardsProvider } from "@/hooks/useRewards";
-import { CheckoutProvider } from "@/hooks/useCheckout";
 import { PWARegister } from "@/components/system/PWARegister";
 import "./globals.css";
 
@@ -50,17 +45,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <ThemeProvider>
           <AuthProvider>
-            <ToastProvider>
-              <NotificationProvider>
-                <CartProvider>
-                  <OrdersProvider>
-                    <RewardsProvider>
-                      <CheckoutProvider>{children}</CheckoutProvider>
-                    </RewardsProvider>
-                  </OrdersProvider>
-                </CartProvider>
-              </NotificationProvider>
-            </ToastProvider>
+            <ToastProvider>{children}</ToastProvider>
           </AuthProvider>
         </ThemeProvider>
         <PWARegister />

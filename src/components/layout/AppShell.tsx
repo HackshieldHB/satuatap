@@ -1,16 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Sidebar, BottomNav } from "./Sidebar";
 import { MobileHeader, DesktopHeader } from "./Header";
 import { OfflineBanner } from "@/components/ui/ErrorState";
 import { ToastContainer } from "@/components/ui/Toast";
-import { AssistantWidget } from "@/components/assistant/AssistantWidget";
-import { LiveSimulation } from "@/components/system/LiveSimulation";
 import { SosButton } from "@/components/system/SosButton";
 import { useOffline } from "@/hooks/useOffline";
 import { isLocalMode, subscribeLocalMode } from "@/lib/local-mode";
 import { cn } from "@/lib/utils";
+
+const AssistantWidget = dynamic(
+  () => import("@/components/assistant/AssistantWidget").then((m) => ({ default: m.AssistantWidget })),
+  { ssr: false }
+);
+const LiveSimulation = dynamic(
+  () => import("@/components/system/LiveSimulation").then((m) => ({ default: m.LiveSimulation })),
+  { ssr: false }
+);
 
 interface AppShellProps {
   children: React.ReactNode;

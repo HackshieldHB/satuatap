@@ -6,14 +6,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { PageLoader } from "@/components/ui/LoadingSpinner";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, session } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.replace("/");
-    }
-  }, [isAuthenticated, isLoading, router]);
+    if (isLoading || !isAuthenticated) return;
+    router.replace(session?.onboardingCompleted === false ? "/onboarding/welcome" : "/");
+  }, [isAuthenticated, isLoading, session?.onboardingCompleted, router]);
 
   if (isLoading) return <PageLoader />;
   if (isAuthenticated) return <PageLoader />;
@@ -37,7 +36,8 @@ export function AppGuard({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated, isLoading, session, router]);
 
   if (isLoading) return <PageLoader />;
-  if (!isAuthenticated || !session?.onboardingCompleted) return <PageLoader />;
+  if (!isAuthenticated) return <PageLoader />;
+  if (!session?.onboardingCompleted) return <PageLoader />;
 
   return <>{children}</>;
 }

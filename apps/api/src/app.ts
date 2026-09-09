@@ -52,6 +52,8 @@ export async function buildApp() {
   });
 
   app.addHook("onRequest", async (req) => {
+    const path = req.url.split("?")[0];
+    if (path.startsWith("/internal/") || path === "/health") return;
     req.log.info({ msg: "API request", method: req.method, url: req.url });
   });
 

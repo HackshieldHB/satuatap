@@ -9,10 +9,15 @@ import { Card } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/Tabs";
 import { PageLoader } from "@/components/ui/LoadingSpinner";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Area } from "@/components/charts";
+import dynamic from "next/dynamic";
 import { formatNumber, formatRelativeTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { EnvironmentDetail, UsagePeriod } from "@/types";
+
+const Area = dynamic(
+  () => import("@/components/charts").then((m) => ({ default: m.Area })),
+  { ssr: false }
+);
 
 const PERIODS: { id: UsagePeriod; label: string }[] = [
   { id: "day", label: "Hari" },

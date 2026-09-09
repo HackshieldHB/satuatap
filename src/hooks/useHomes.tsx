@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import type { Home } from "@/types";
 import { homeService } from "@/services/home.service";
 import { MOCK_HOMES } from "@/data/mock";
+import { useMockData } from "@/lib/config";
 
 /**
- * The buildings/units the signed-in user can manage. Loads from the API and
- * falls back to the local sample so the switcher always has something to show.
+ * Homes the signed-in user can switch to. In API mode we never fall back to
+ * mock IDs — picking a sample home the user is not a member of 403s the dashboard.
  */
 export function useHomes(): Home[] {
-  const [homes, setHomes] = useState<Home[]>(MOCK_HOMES);
+  const [homes, setHomes] = useState<Home[]>(useMockData ? MOCK_HOMES : []);
 
   useEffect(() => {
     let alive = true;

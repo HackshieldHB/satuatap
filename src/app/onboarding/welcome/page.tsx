@@ -4,9 +4,23 @@ import { useRouter } from "next/navigation";
 import { Logo } from "@/components/layout/Logo";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/hooks/useAuth";
+import { authService } from "@/services/auth.service";
 
 export default function OnboardingWelcomePage() {
   const router = useRouter();
+  const { refreshSession } = useAuth();
+
+  const skip = async () => {
+    const res = await authService.completeOnboarding({
+      homeName: "Rumah",
+      homeType: "house",
+      skippedDevice: true,
+    });
+    if (!res.success) return;
+    refreshSession();
+    router.replace("/");
+  };
 
   return (
     <div className="w-full max-w-md space-y-6 animate-fade-in text-center">
@@ -24,7 +38,7 @@ export default function OnboardingWelcomePage() {
           Mulai Setup
         </Button>
         <button
-          onClick={() => router.push("/")}
+          onClick={() => void skip()}
           className="text-sm text-muted hover:text-primary"
         >
           Lewati untuk sekarang
