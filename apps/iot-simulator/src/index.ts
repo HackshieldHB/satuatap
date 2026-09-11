@@ -44,6 +44,10 @@ const devices = {
   lightBed: "light-bedroom",
   lightKitchen: "light-kitchen",
   lightSpare: "light-spare",
+  lightLiving2: "light-living-2",
+  lightBedroom2: "light-bedroom-2",
+  lightKitchen2: "light-kitchen-2",
+  lightTeras: "light-teras",
   tankRooftop: "tank-rooftop",
 };
 
@@ -62,7 +66,16 @@ const nodes = [
   },
   {
     id: "esp32-lighting-001",
-    deviceIds: [devices.lightLiving, devices.lightBed, devices.lightKitchen, devices.lightSpare],
+    deviceIds: [
+      devices.lightLiving,
+      devices.lightBed,
+      devices.lightKitchen,
+      devices.lightSpare,
+      devices.lightLiving2,
+      devices.lightBedroom2,
+      devices.lightKitchen2,
+      devices.lightTeras,
+    ],
   },
   { id: "esp32-tank-001", deviceIds: [devices.tankRooftop] },
 ] as const;
@@ -72,6 +85,10 @@ const lights: Record<string, { on: boolean }> = {
   [devices.lightBed]: { on: false },
   [devices.lightKitchen]: { on: false },
   [devices.lightSpare]: { on: false },
+  [devices.lightLiving2]: { on: false },
+  [devices.lightBedroom2]: { on: false },
+  [devices.lightKitchen2]: { on: false },
+  [devices.lightTeras]: { on: false },
 };
 
 let energyMainKwh = 4.5;

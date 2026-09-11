@@ -352,6 +352,48 @@ async function main() {
       capabilities: ["on_off"],
       isOn: false,
     },
+    // Lampu 5–8: demo 8 titik lampu (2× relay 4-channel). Semua on/off relay
+    // di node lighting, tersebar ke 3 ruangan yang ada.
+    {
+      id: "light-living-2",
+      homeId: "home-1",
+      roomId: "room-1",
+      type: "light",
+      name: "Lampu Ruang Tamu 2",
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
+      isOn: false,
+    },
+    {
+      id: "light-bedroom-2",
+      homeId: "home-1",
+      roomId: "room-2",
+      type: "light",
+      name: "Lampu Kamar 2",
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
+      isOn: false,
+    },
+    {
+      id: "light-kitchen-2",
+      homeId: "home-1",
+      roomId: "room-3",
+      type: "light",
+      name: "Lampu Dapur 2",
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
+      isOn: false,
+    },
+    {
+      id: "light-teras",
+      homeId: "home-1",
+      roomId: "room-1",
+      type: "light",
+      name: "Lampu Teras",
+      nodeId: "esp32-lighting-001",
+      capabilities: ["on_off"],
+      isOn: false,
+    },
     // Actuators: relay-driven on/off devices on the lighting node. A solenoid
     // door lock and a water valve — same command→ack→state contract as a light.
     {

@@ -2,8 +2,10 @@
  * SATU ATAP — Node esp32-lighting-001 (Fase D, firmware node #3: AKTUATOR)
  * ------------------------------------------------------------------------
  * Node PERTAMA yang MENERIMA perintah (bukan cuma publish). Menggerakkan relay
- * untuk enam device on/off:
- *   light-living-room / light-bedroom / light-kitchen / light-spare  (lampu)
+ * untuk sepuluh device on/off (8 lampu + 2 solenoid; butuh 2× relay 4-channel
+ * untuk lampu + 1 modul relay untuk solenoid):
+ *   light-living-room / -bedroom / -kitchen / -spare
+ *   light-living-2 / -bedroom-2 / -kitchen-2 / -teras            (lampu, total 8)
  *   lock-front   → solenoid kunci pintu   (FAIL-SECURE: relay OFF = terkunci)
  *   valve-main   → solenoid keran air     (FAIL-CLOSED: relay OFF = tertutup)
  *
@@ -64,6 +66,10 @@ Actuator actuators[] = {
   { "light-bedroom",     22, false, "", "", "" },
   { "light-kitchen",     21, false, "", "", "" },
   { "light-spare",       19, false, "", "", "" },
+  { "light-living-2",    16, false, "", "", "" },  // relay board #2, ch1
+  { "light-bedroom-2",    4, false, "", "", "" },  // relay board #2, ch2
+  { "light-kitchen-2",   13, false, "", "", "" },  // relay board #2, ch3
+  { "light-teras",       14, false, "", "", "" },  // relay board #2, ch4
   { "lock-front",        18, false, "", "", "" },  // fail-secure
   { "valve-main",        17, false, "", "", "" },  // fail-closed
 };
