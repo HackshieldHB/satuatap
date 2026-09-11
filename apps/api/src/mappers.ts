@@ -45,6 +45,7 @@ export function formatMetricValue(
   if (typeof metrics.energy_kwh === "number") return `${metrics.energy_kwh.toFixed(2)} kWh`;
   if (typeof metrics.volume_liters === "number") return `${Math.round(metrics.volume_liters)} L`;
   if (typeof metrics.temperature_c === "number") return `${metrics.temperature_c.toFixed(1)}°C`;
+  if (typeof metrics.level_pct === "number") return `${Math.round(metrics.level_pct)}%`;
   if (typeof metrics.motion === "boolean")
     return metrics.motion ? "Gerakan terdeteksi" : "Tidak ada aktivitas";
   if (typeof metrics.on === "boolean") return metrics.on ? "ON" : "OFF";

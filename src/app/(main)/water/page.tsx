@@ -7,9 +7,10 @@ import { formatNumber } from "@/lib/utils";
 import { Droplets } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useHomeEvents } from "@/hooks/useHomeEvents";
-import { telemetryService, type WaterDetail } from "@/services/telemetry.service";
+import { telemetryService, type WaterDetail, type TankReading } from "@/services/telemetry.service";
 import { PageLoader } from "@/components/ui/LoadingSpinner";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { TankLevelCard } from "@/components/home/TankLevelCard";
 import type { UsagePeriod } from "@/types";
 
 const UsageDetailView = dynamic(
@@ -22,16 +23,21 @@ export default function WaterPage() {
   const homeId = session?.selectedHomeId || "home-1";
   const [period, setPeriod] = useState<UsagePeriod>("day");
   const [data, setData] = useState<WaterDetail | null>(null);
+  const [tanks, setTanks] = useState<TankReading[]>([]);
   const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await telemetryService.getWater(homeId, period);
+    const [res, tankRes] = await Promise.all([
+      telemetryService.getWater(homeId, period),
+      telemetryService.getTank(homeId),
+    ]);
     if (res.success && res.data) {
       setData(res.data);
       setError(false);
     } else {
       setError(true);
     }
+    if (tankRes.success && tankRes.data) setTanks(tankRes.data.tanks);
   }, [homeId, period]);
 
   useEffect(() => {
@@ -44,7 +50,9 @@ export default function WaterPage() {
   if (error || !data) return <ErrorState onRetry={load} title="Gagal memuat air" />;
 
   return (
-    <UsageDetailView
+    <div className="space-y-4">
+      <TankLevelCard tanks={tanks} />
+      <UsageDetailView
       title="Air"
       icon={Droplets}
       accentText="text-info"
@@ -67,5 +75,6 @@ export default function WaterPage() {
         "Manfaatkan air bekas cucian untuk menyiram tanaman",
       ]}
     />
+    </div>
   );
 }

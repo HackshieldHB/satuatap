@@ -721,6 +721,35 @@ export async function registerRoutes(app: FastifyInstance) {
     };
   });
 
+  // Latest water-tank level per tank_level_sensor device (HC-SR04). level_pct is
+  // an instant metric on the reading JSON; distance_cm rides along for diagnostics.
+  app.get("/v1/homes/:homeId/tank", { preHandler: authenticate }, async (req, reply) => {
+    const { homeId } = req.params as { homeId: string };
+    if (!(await requireHomeRole(req.user.sub, homeId))) {
+      return reply.code(403).send({ success: false, error: "Forbidden" });
+    }
+    const devices = await prisma.device.findMany({
+      where: { homeId, type: "tank_level_sensor" },
+      orderBy: { name: "asc" },
+    });
+    const metricsByDevice = await latestMetricsForDevices(devices.map((d) => d.id));
+    const tanks = devices.map((d) => {
+      const m = metricsByDevice.get(d.id) ?? null;
+      const level = typeof m?.level_pct === "number" ? m.level_pct : null;
+      const distance = typeof m?.distance_cm === "number" ? m.distance_cm : null;
+      return {
+        deviceId: d.id,
+        name: d.name,
+        roomId: d.roomId,
+        status: d.status,
+        levelPct: level,
+        distanceCm: distance,
+        updatedAt: (d.lastSeen ?? d.createdAt).toISOString(),
+      };
+    });
+    return { success: true, data: { homeId, tanks } };
+  });
+
   app.get("/v1/homes/:homeId/dashboard", { preHandler: authenticate }, async (req, reply) => {
     const { homeId } = req.params as { homeId: string };
     if (!(await requireHomeRole(req.user.sub, homeId))) {

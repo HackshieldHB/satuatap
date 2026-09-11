@@ -374,6 +374,18 @@ async function main() {
       capabilities: ["on_off"],
       isOn: false,
     },
+    // Tank-level sensor (HC-SR04) on its own node — the rooftop reservoir. Reports
+    // level_pct (instant metric); no counter/migration needed.
+    {
+      id: "tank-rooftop",
+      homeId: "home-1",
+      roomId: "room-3",
+      type: "tank_level_sensor",
+      name: "Tandon Atap",
+      nodeId: "esp32-tank-001",
+      capabilities: ["tank_level"],
+      config: { tankHeightCm: 30, fullDistanceCm: 4 },
+    },
   ];
 
   // Gedung B (home-2) mirrors home-1's node/device layout: same sensors, distinct
@@ -388,6 +400,7 @@ async function main() {
     "esp32-energy-001": "esp32-energy-002",
     "esp32-water-env-001": "esp32-water-env-002",
     "esp32-lighting-001": "esp32-lighting-002",
+    "esp32-tank-001": "esp32-tank-002",
   };
   for (const d of [...devices]) {
     devices.push({

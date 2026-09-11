@@ -22,6 +22,8 @@ export const telemetryMetricsSchema = z
     rssi: z.number().optional(),
     on: z.boolean().optional(),
     brightness: z.number().min(0).max(100).optional(),
+    level_pct: z.number().min(0).max(100).optional(),
+    distance_cm: z.number().min(0).optional(),
   })
   .strict();
 

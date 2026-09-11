@@ -18,6 +18,9 @@ describe("capabilities", () => {
   it("lights expose on_off", () => {
     expect(hasCapability(DEFAULT_CAPABILITIES.light, "on_off")).toBe(true);
   });
+  it("tank level sensors expose tank_level", () => {
+    expect(hasCapability(DEFAULT_CAPABILITIES.tank_level_sensor, "tank_level")).toBe(true);
+  });
   it("classifies counter metrics", () => {
     expect(isCounterMetric("energy_kwh")).toBe(true);
     expect(isCounterMetric("power")).toBe(false);
@@ -46,6 +49,13 @@ describe("telemetry schema", () => {
       metrics: { voltage: 220.4, current: 2.13, power: 469.4, energy_kwh: 4.72 },
     });
     expect(parsed.metrics.power).toBe(469.4);
+  });
+  it("accepts tank level metrics", () => {
+    const parsed = telemetryPayloadSchema.parse({
+      ts: "2026-08-25T05:00:00.000Z",
+      metrics: { level_pct: 72.5, distance_cm: 14.2 },
+    });
+    expect(parsed.metrics.level_pct).toBe(72.5);
   });
   it("rejects unknown metric keys", () => {
     expect(() =>

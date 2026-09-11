@@ -14,6 +14,7 @@ export const CAPABILITIES = [
   "on_off",
   "brightness",
   "rssi",
+  "tank_level",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -25,6 +26,7 @@ export const DEVICE_TYPES = [
   "humidity_sensor",
   "environment_sensor",
   "motion_sensor",
+  "tank_level_sensor",
   "light",
   "switch",
   "smart_plug",
@@ -41,6 +43,7 @@ export const DEFAULT_CAPABILITIES: Record<DeviceTypeId, Capability[]> = {
   humidity_sensor: ["humidity"],
   environment_sensor: ["temperature", "humidity"],
   motion_sensor: ["motion"],
+  tank_level_sensor: ["tank_level"],
   light: ["on_off"],
   switch: ["on_off"],
   smart_plug: ["on_off", "power"],
@@ -69,6 +72,7 @@ export const INSTANT_METRICS = [
   "humidity_pct",
   "rssi",
   "brightness",
+  "level_pct",
 ] as const;
 export type InstantMetric = (typeof INSTANT_METRICS)[number];
 
@@ -88,4 +92,5 @@ export const HARDWARE_SKU_MAP = {
   dht22: "environment_sensor",
   "hc-sr501": "motion_sensor",
   "relay-4ch": "switch",
+  "hc-sr04": "tank_level_sensor",
 } as const;

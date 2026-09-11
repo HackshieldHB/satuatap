@@ -24,6 +24,18 @@ export type WaterDetail = WaterUsage & {
   tariffPerM3?: number;
 };
 
+export type TankReading = {
+  deviceId: string;
+  name: string;
+  roomId: string;
+  status: string;
+  levelPct: number | null;
+  distanceCm: number | null;
+  updatedAt: string;
+};
+
+export type TankData = { homeId: string; tanks: TankReading[] };
+
 function periodFrom(period: UsagePeriod): Date {
   const from = new Date();
   if (period === "month") from.setUTCDate(from.getUTCDate() - 30);
@@ -112,6 +124,30 @@ export class TelemetryService {
         peak: 12.4,
         average: 3.1,
         history,
+      },
+    };
+  }
+
+  async getTank(homeId: string): Promise<ApiResponse<TankData>> {
+    if (!useMockData) {
+      return apiFetch<TankData>(`/v1/homes/${homeId}/tank`);
+    }
+    await delay(150);
+    return {
+      success: true,
+      data: {
+        homeId,
+        tanks: [
+          {
+            deviceId: "tank-rooftop",
+            name: "Tandon Atap",
+            roomId: "room-3",
+            status: "online",
+            levelPct: 72,
+            distanceCm: 11.3,
+            updatedAt: new Date().toISOString(),
+          },
+        ],
       },
     };
   }

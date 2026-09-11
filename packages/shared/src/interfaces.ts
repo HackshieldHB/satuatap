@@ -26,6 +26,13 @@ export interface MotionReading {
   motion: boolean;
 }
 
+export interface TankLevelReading {
+  /** Percent full, 0–100. Derived in firmware from raw distance + tank height. */
+  level_pct?: number;
+  /** Raw ultrasonic distance to the water surface, for diagnostics. */
+  distance_cm?: number;
+}
+
 export interface LightingState {
   on: boolean;
   brightness?: number;
@@ -45,6 +52,10 @@ export interface EnvironmentSensor {
 
 export interface MotionSensor {
   read(): Promise<MotionReading>;
+}
+
+export interface TankLevelSensor {
+  read(): Promise<TankLevelReading>;
 }
 
 export interface LightingController {

@@ -29,6 +29,7 @@ const WATER_MS = Number(process.env.WATER_INTERVAL_MS ?? 5000);
 const ENV_MS = Number(process.env.ENVIRONMENT_INTERVAL_MS ?? 10000);
 const MOTION_MS = Number(process.env.MOTION_INTERVAL_MS ?? 20000);
 const LIGHT_MS = Number(process.env.LIGHTING_INTERVAL_MS ?? 15000);
+const TANK_MS = Number(process.env.TANK_INTERVAL_MS ?? 8000);
 
 const devices = {
   energyMain: "energy-main",
@@ -43,6 +44,7 @@ const devices = {
   lightBed: "light-bedroom",
   lightKitchen: "light-kitchen",
   lightSpare: "light-spare",
+  tankRooftop: "tank-rooftop",
 };
 
 const nodes = [
@@ -62,6 +64,7 @@ const nodes = [
     id: "esp32-lighting-001",
     deviceIds: [devices.lightLiving, devices.lightBed, devices.lightKitchen, devices.lightSpare],
   },
+  { id: "esp32-tank-001", deviceIds: [devices.tankRooftop] },
 ] as const;
 
 const lights: Record<string, { on: boolean }> = {
@@ -75,6 +78,11 @@ let energyMainKwh = 4.5;
 let energyAcKwh = 1.2;
 let volumeMain = 120;
 let volumeKitchen = 40;
+// Rooftop tank: drains slowly, refills when it runs low. Matches seed config
+// (tankHeightCm 30, fullDistanceCm 4) so distance_cm tracks level_pct plausibly.
+const TANK_HEIGHT_CM = 30;
+const TANK_FULL_DISTANCE_CM = 4;
+let tankLevel = 88;
 
 const deviceClient = new Map<string, MqttClient>();
 
@@ -235,3 +243,15 @@ setInterval(() => {
     pub(id, "state", { ts: nowTs(), metrics: { on: st.on } }, true);
   }
 }, LIGHT_MS);
+
+setInterval(() => {
+  tankLevel -= 0.5 + Math.random() * 1.8;
+  if (tankLevel <= 24) tankLevel = 92 + Math.random() * 6; // pump refills the tank
+  const level = Math.max(0, Math.min(100, tankLevel));
+  const distance =
+    TANK_FULL_DISTANCE_CM + ((100 - level) / 100) * (TANK_HEIGHT_CM - TANK_FULL_DISTANCE_CM);
+  pub(devices.tankRooftop, "telemetry", {
+    ts: nowTs(),
+    metrics: { level_pct: Number(level.toFixed(1)), distance_cm: Number(distance.toFixed(1)) },
+  });
+}, TANK_MS);
