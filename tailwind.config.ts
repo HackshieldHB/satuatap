@@ -10,37 +10,39 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // SATU ATAP "Smart Living" palette — soft, warm, residential.
+        // Primary = Dusty Blue; Secondary = Powder Blue; accents peach/sage.
         primary: {
-          DEFAULT: "#FF7A59",
+          DEFAULT: "#7895AC", // Dusty Blue
           foreground: "#FFFFFF",
-          hover: "#FF6340",
-          light: "#FFF0EC",
+          hover: "#5F7C93",
+          light: "#EDF2F6",
         },
         secondary: {
-          DEFAULT: "#5BC0BE",
+          DEFAULT: "#7FA6C2", // Powder Blue (readable; lighter than primary)
           foreground: "#FFFFFF",
-          hover: "#4AA8A6",
-          light: "#E8F8F8",
+          hover: "#6B93B0",
+          light: "#EEF4F8",
         },
         accent: {
-          DEFAULT: "#FFD166",
-          foreground: "#1F2937",
+          DEFAULT: "#E9B89B", // Soft Peach (warm accent)
+          foreground: "#263746",
         },
         success: {
-          DEFAULT: "#43AA8B",
-          light: "#E8F5F0",
+          DEFAULT: "#6E9A6A", // Sage (readable), for online/active/done
+          light: "#EAF1E7",
         },
         info: {
-          DEFAULT: "#4D96FF",
-          light: "#EBF3FF",
+          DEFAULT: "#5B95CE", // Soft Blue, for water/internet/in-progress
+          light: "#EAF2F9",
         },
         warning: {
-          DEFAULT: "#F4A261",
-          light: "#FEF3E8",
+          DEFAULT: "#F4A261", // Warm Amber, for electricity/warning/pending
+          light: "#FDF1E7",
         },
         error: {
-          DEFAULT: "#E76F51",
-          light: "#FDEEEA",
+          DEFAULT: "#E27B6B", // Soft Coral (desaturated red)
+          light: "#FBEDEA",
         },
         background: "rgb(var(--color-background) / <alpha-value>)",
         surface: "rgb(var(--color-surface) / <alpha-value>)",

@@ -23,8 +23,8 @@ export default function GlobalError({
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "system-ui, -apple-system, sans-serif",
-          background: "#F8FAFC",
-          color: "#1F2937",
+          background: "#FAF9F6",
+          color: "#263746",
         }}
       >
         <div style={{ textAlign: "center", padding: 24, maxWidth: 360 }}>
@@ -43,7 +43,7 @@ export default function GlobalError({
               padding: "0 20px",
               borderRadius: 12,
               border: "none",
-              background: "#FF7A59",
+              background: "#7895AC",
               color: "#fff",
               fontWeight: 600,
               cursor: "pointer",
