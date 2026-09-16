@@ -37,7 +37,36 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen isolate">
+      {/* Botanical decorative accent (behind content, desktop only) — reference feel. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed bottom-0 left-0 -z-10 hidden h-60 w-60 opacity-90 lg:left-[236px] lg:block"
+        style={{
+          backgroundImage: "url('/assets/27-leaves-bottom.png')",
+          backgroundSize: "contain",
+          backgroundPosition: "bottom left",
+          backgroundRepeat: "no-repeat",
+          WebkitMaskImage:
+            "radial-gradient(130% 120% at 22% 82%, #000 42%, transparent 74%)",
+          maskImage:
+            "radial-gradient(130% 120% at 22% 82%, #000 42%, transparent 74%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none fixed -right-8 top-16 -z-10 hidden h-52 w-52 opacity-70 xl:block"
+        style={{
+          backgroundImage: "url('/assets/08-leaves.png')",
+          backgroundSize: "contain",
+          backgroundPosition: "top right",
+          backgroundRepeat: "no-repeat",
+          WebkitMaskImage:
+            "radial-gradient(120% 120% at 78% 22%, #000 40%, transparent 72%)",
+          maskImage:
+            "radial-gradient(120% 120% at 78% 22%, #000 40%, transparent 72%)",
+        }}
+      />
       {isOffline && <OfflineBanner />}
       {localMode && (
         <div
