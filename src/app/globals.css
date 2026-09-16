@@ -5,21 +5,22 @@
 @layer base {
   :root {
     /* Semantic colors as RGB channels so Tailwind opacity modifiers work. */
-    /* Smart Living light theme: warm off-white ground, deep-slate ink. */
-    --color-background: 250 249 246; /* Warm Off-White #FAF9F6 */
+    /* Sage theme: crisp off-white canvas, charcoal ink, sage-tinted borders. */
+    --color-background: 247 250 251; /* Airy off-white #F7FAFB */
     --color-surface: 255 255 255;
-    --color-foreground: 38 55 70; /* Deep Slate #263746 */
-    --color-muted: 100 116 139; /* Soft slate gray */
-    --color-border: 230 226 219; /* Warm soft border */
+    --color-foreground: 31 41 55; /* Charcoal #1F2937 */
+    --color-muted: 100 116 139; /* Slate gray */
+    --color-border: 231 236 233; /* Soft sage-slate border */
     color-scheme: light;
   }
 
   .dark {
-    --color-background: 15 23 42;
-    --color-surface: 30 41 59;
-    --color-foreground: 226 232 240;
-    --color-muted: 148 163 184;
-    --color-border: 51 65 85;
+    /* Deep slate-sage dark surfaces. */
+    --color-background: 26 33 29; /* #1A211D */
+    --color-surface: 34 43 38; /* #222B26 */
+    --color-foreground: 229 233 230;
+    --color-muted: 156 168 160;
+    --color-border: 55 66 59;
     color-scheme: dark;
   }
 
@@ -30,10 +31,26 @@
 
   body {
     background-color: rgb(var(--color-background));
+    /* "Fresh Air" ambient wash: airy off-white base with large, low-saturation
+       diffused blobs of powder blue + mint + pale sky. Clean & non-distracting. */
+    background-image:
+      radial-gradient(70rem 54rem at 0% -8%, rgba(184, 206, 221, 0.52), transparent 62%),
+      radial-gradient(66rem 52rem at 104% -6%, rgba(182, 214, 196, 0.48), transparent 64%),
+      radial-gradient(72rem 60rem at 98% 106%, rgba(214, 228, 232, 0.55), transparent 62%),
+      radial-gradient(58rem 50rem at -6% 108%, rgba(190, 216, 201, 0.3), transparent 62%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
     color: rgb(var(--color-foreground));
     @apply antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  /* Dark mode keeps a calm deep slate-sage; only a whisper of ambient color. */
+  .dark body {
+    background-image:
+      radial-gradient(60rem 46rem at 6% -4%, rgba(120, 149, 172, 0.1), transparent 60%),
+      radial-gradient(58rem 50rem at 94% 104%, rgba(138, 154, 134, 0.1), transparent 60%);
   }
 
   *:focus-visible {
@@ -58,15 +75,15 @@
   }
 
   .ai-gradient {
-    /* AI surfaces lean soft lavender → soft blue. */
-    background: linear-gradient(135deg, #f1ecf9 0%, #eaf1f7 100%);
+    /* AI surfaces lean soft sage → off-white. */
+    background: linear-gradient(135deg, #eef2ec 0%, #f7faf6 100%);
   }
 
   .dark .ai-gradient {
     background: linear-gradient(
       135deg,
-      rgba(150, 130, 200, 0.14) 0%,
-      rgba(120, 149, 172, 0.16) 100%
+      rgba(138, 154, 134, 0.16) 0%,
+      rgba(110, 127, 106, 0.12) 100%
     );
   }
 

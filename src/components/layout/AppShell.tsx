@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { motion, AnimatePresence } from "framer-motion";
+import { usePathname } from "next/navigation";
 import { Sidebar, BottomNav } from "./Sidebar";
 import { MobileHeader, DesktopHeader } from "./Header";
 import { OfflineBanner } from "@/components/ui/ErrorState";
@@ -26,6 +28,7 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const isOffline = useOffline();
+  const pathname = usePathname();
   const [localMode, setLocal] = useState(false);
 
   useEffect(() => {
@@ -34,7 +37,7 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       {isOffline && <OfflineBanner />}
       {localMode && (
         <div
@@ -59,7 +62,17 @@ export function AppShell({ children }: AppShellProps) {
             localMode && (isOffline ? "pt-20" : "pt-10")
           )}
         >
-          {children}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={pathname}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
       <BottomNav />

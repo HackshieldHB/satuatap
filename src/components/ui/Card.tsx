@@ -4,6 +4,8 @@ import { forwardRef, type HTMLAttributes } from "react";
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   variant?: "default" | "elevated" | "outline" | "ai";
   padding?: "none" | "sm" | "md" | "lg";
+  /** Opt-in hover elevation for clickable cards. */
+  interactive?: boolean;
 }
 
 const paddings = {
@@ -14,7 +16,7 @@ const paddings = {
 };
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className, variant = "default", padding = "md", children, ...props }, ref) => (
+  ({ className, variant = "default", padding = "md", interactive, children, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
@@ -23,6 +25,8 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
         variant === "elevated" && "shadow-floating",
         variant === "outline" && "border border-border",
         variant === "ai" && "ai-gradient border border-secondary/20 shadow-card",
+        interactive &&
+          "cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-floating",
         paddings[padding],
         className
       )}
