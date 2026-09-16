@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, ChevronDown, Building2, Check } from "lucide-react";
+import { Bell, ChevronDown, Building2, Check, Search } from "lucide-react";
 import { Logo } from "./Logo";
 import { Avatar } from "@/components/ui/Avatar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -111,12 +111,12 @@ export function DesktopHeader() {
   const selectedHome = homes.find((h) => h.id === selectedHomeId);
 
   return (
-    <header className="hidden lg:flex items-center justify-between gap-4 h-16 px-6 border-b border-border bg-surface">
+    <header className="hidden lg:flex items-center gap-4 h-16 px-6 border-b border-border bg-surface/80 backdrop-blur-md">
       {/* Building switcher — manage every building from one screen */}
-      <div className="relative">
+      <div className="relative shrink-0">
         <button
           onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-2 rounded-md bg-background px-3 py-1.5 text-sm font-medium hover:bg-background/70"
+          className="flex items-center gap-2 rounded-full bg-background px-3 py-1.5 text-sm font-medium hover:bg-background/70"
         >
           <Building2 className="h-4 w-4 text-primary" />
           <span className="truncate max-w-[180px]">{selectedHome?.name ?? "Rumah"}</span>
@@ -164,7 +164,24 @@ export function DesktopHeader() {
         )}
       </div>
 
-      <div className="flex items-center gap-4">
+      {/* Global search field (reference header) */}
+      <form
+        onSubmit={(e) => e.preventDefault()}
+        className="flex-1 min-w-0 max-w-xl"
+        role="search"
+      >
+        <div className="flex h-10 items-center gap-2 rounded-full border border-border bg-background px-4">
+          <Search className="h-4 w-4 shrink-0 text-muted" />
+          <input
+            type="search"
+            placeholder="Cari perangkat, layanan, penghuni, atau laporan..."
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
+            aria-label="Cari"
+          />
+        </div>
+      </form>
+
+      <div className="flex shrink-0 items-center gap-4">
         <ThemeToggle />
       <Link
         href="/notifications"
