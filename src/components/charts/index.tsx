@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 export type ChartPoint = { label: string; value: number };
 
-const PRIMARY = "#8A9A86";
+const PRIMARY = "#7E6C57";
 const GRID = "rgb(var(--color-border) / 0.6)";
 const TICK = "rgb(var(--color-muted))";
 

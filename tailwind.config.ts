@@ -10,39 +10,40 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // SATU ATAP "Sage" palette — premium PropTech, calm & natural.
-        // Primary = Sage Green; deeper forest-sage for hover/accents.
+        // SATU ATAP "Warm Modern Smart Living" palette — muted taupe/brown
+        // primary over warm cream, with sage / blue-grey / peach as balanced
+        // supporting tones. No single dominant colour; semantic accents stay.
         primary: {
-          DEFAULT: "#8A9A86", // Soft/Muted Sage
+          DEFAULT: "#7E6C57", // Muted taupe-brown
           foreground: "#FFFFFF",
-          hover: "#6E7F6A", // Darker forest-sage
-          light: "#EFF2ED",
+          hover: "#665845", // Deeper warm brown
+          light: "#F0EAE1",
         },
         secondary: {
-          DEFAULT: "#5F7268", // Deep sage-slate (readable supporting tone)
+          DEFAULT: "#7E97A4", // Muted blue-grey
           foreground: "#FFFFFF",
-          hover: "#4E5E55",
-          light: "#ECF0EE",
+          hover: "#6A828E",
+          light: "#ECF1F3",
         },
         accent: {
-          DEFAULT: "#C9B48A", // Soft sand/gold warm accent
-          foreground: "#1F2937",
+          DEFAULT: "#E4B48C", // Warm peach
+          foreground: "#3A332A",
         },
         success: {
-          DEFAULT: "#6E9A6A", // Pastel green — online/active/done
-          light: "#EAF1E7",
+          DEFAULT: "#7E9E76", // Muted green — online/active/done
+          light: "#ECF1E8",
         },
         info: {
-          DEFAULT: "#6E93AC", // Soft slate-blue — water/internet/in-progress
-          light: "#EAF0F5",
+          DEFAULT: "#7DA0C4", // Soft blue — water/internet/in-progress
+          light: "#EBF1F7",
         },
         warning: {
-          DEFAULT: "#D8A93E", // Soft yellow — warning/proses/pending
-          light: "#FAF3E0",
+          DEFAULT: "#D9A65C", // Warm amber — warning/proses/pending
+          light: "#FAF2E2",
         },
         error: {
-          DEFAULT: "#D9736A", // Soft red — offline/nonaktif/critical
-          light: "#FBEBE9",
+          DEFAULT: "#D68A7C", // Soft coral — offline/nonaktif/critical
+          light: "#FBEEEB",
         },
         background: "rgb(var(--color-background) / <alpha-value>)",
         surface: "rgb(var(--color-surface) / <alpha-value>)",

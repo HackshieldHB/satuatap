@@ -68,7 +68,20 @@ export function DashboardHero({
   }[statusType];
 
   return (
-    <div className="relative overflow-hidden rounded-hero bg-gradient-to-br from-primary via-primary to-primary-hover p-5 lg:p-6 text-primary-foreground shadow-floating animate-pop-in">
+    <div className="relative overflow-hidden rounded-hero p-5 lg:p-6 text-white shadow-floating animate-pop-in">
+      <div
+        className="pointer-events-none absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/assets/16-apartment-exterior.png')" }}
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(115deg, rgba(58,46,34,0.88) 0%, rgba(72,58,44,0.62) 46%, rgba(96,80,60,0.34) 100%)",
+        }}
+        aria-hidden
+      />
       <span
         className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl"
         aria-hidden

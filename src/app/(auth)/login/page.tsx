@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Logo, HomeIllustration } from "@/components/layout/Logo";
+import { Logo } from "@/components/layout/Logo";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -73,9 +73,8 @@ export default function LoginPage() {
   return (
     <AuthGuard>
       <div className="w-full max-w-md space-y-6 animate-fade-in">
-        <div className="text-center space-y-4">
+        <div className="flex justify-center">
           <Logo size="lg" showTagline className="items-center" />
-          <HomeIllustration className="mx-auto" />
         </div>
 
         <Card padding="lg" className="shadow-floating">
