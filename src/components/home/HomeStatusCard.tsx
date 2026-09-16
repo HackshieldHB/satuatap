@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/Card";
 import { cn, formatNumber } from "@/lib/utils";
-import { Home as HomeIcon, Zap, Droplets, Cpu } from "lucide-react";
+import { Home as HomeIcon, Zap, Droplets, Wifi, Thermometer, MapPin } from "lucide-react";
 
 interface HomeStatusCardProps {
   homeName: string;
@@ -45,10 +45,6 @@ interface DashboardHeroProps {
   homeName: string;
   statusMessage: string;
   statusType?: "normal" | "warning" | "error";
-  energyKwh: number;
-  waterLiters: number;
-  devicesOnline: number;
-  devicesOffline: number;
 }
 
 export function DashboardHero({
@@ -56,10 +52,6 @@ export function DashboardHero({
   homeName,
   statusMessage,
   statusType = "normal",
-  energyKwh,
-  waterLiters,
-  devicesOnline,
-  devicesOffline,
 }: DashboardHeroProps) {
   const dot = {
     normal: "bg-emerald-300",
@@ -68,7 +60,7 @@ export function DashboardHero({
   }[statusType];
 
   return (
-    <div className="relative overflow-hidden rounded-hero p-5 lg:p-6 text-white shadow-floating animate-pop-in">
+    <div className="relative flex min-h-[184px] flex-col justify-between overflow-hidden rounded-hero p-6 text-white shadow-floating animate-pop-in lg:min-h-[212px] lg:p-8">
       <div
         className="pointer-events-none absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/assets/16-apartment-exterior.png')" }}
@@ -78,80 +70,100 @@ export function DashboardHero({
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "linear-gradient(115deg, rgba(58,46,34,0.88) 0%, rgba(72,58,44,0.62) 46%, rgba(96,80,60,0.34) 100%)",
+            "linear-gradient(115deg, rgba(58,46,34,0.9) 0%, rgba(72,58,44,0.58) 48%, rgba(96,80,60,0.3) 100%)",
         }}
         aria-hidden
       />
-      <span
-        className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl"
-        aria-hidden
-      />
-      <span
-        className="pointer-events-none absolute -left-8 -bottom-10 h-32 w-32 rounded-full bg-secondary/30 blur-2xl"
-        aria-hidden
-      />
 
-      <div className="relative flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl lg:text-2xl font-bold">{greeting}</h1>
-          <p className="text-sm text-primary-foreground/80 mt-0.5 truncate">
-            {homeName}
-          </p>
-          <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium backdrop-blur-sm">
-            <span className={cn("h-1.5 w-1.5 rounded-full", dot)} aria-hidden />
-            {statusMessage}
-          </span>
-        </div>
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-2xl backdrop-blur-sm">
-          🏠
-        </div>
+      <div className="relative flex justify-end">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium backdrop-blur-sm">
+          <MapPin className="h-3.5 w-3.5" aria-hidden />
+          {homeName}
+        </span>
       </div>
 
-      <div className="relative mt-5 grid grid-cols-3 gap-2.5">
-        <HeroMetric
-          icon={<Zap className="h-4 w-4" />}
-          value={formatNumber(energyKwh, 2)}
-          unit="kWh"
-          label="Listrik hari ini"
-        />
-        <HeroMetric
-          icon={<Droplets className="h-4 w-4" />}
-          value={formatNumber(waterLiters)}
-          unit="L"
-          label="Air hari ini"
-        />
-        <HeroMetric
-          icon={<Cpu className="h-4 w-4" />}
-          value={`${devicesOnline}`}
-          unit={`/${devicesOnline + devicesOffline}`}
-          label="Perangkat online"
-        />
+      <div className="relative">
+        <h1 className="text-2xl font-bold lg:text-[1.9rem]">{greeting}</h1>
+        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium backdrop-blur-sm">
+          <span className={cn("h-1.5 w-1.5 rounded-full", dot)} aria-hidden />
+          {statusMessage}
+        </span>
       </div>
     </div>
   );
 }
 
-function HeroMetric({
-  icon,
-  value,
-  unit,
-  label,
-}: {
-  icon: React.ReactNode;
-  value: string;
-  unit: string;
-  label: string;
-}) {
+interface DashboardStatsProps {
+  energyKwh: number;
+  waterLiters: number;
+  devicesOnline: number;
+  devicesOffline: number;
+  temperature?: number;
+}
+
+/** Reference-style KPI row: 4 warm cards with a coloured icon chip. */
+export function DashboardStats({
+  energyKwh,
+  waterLiters,
+  devicesOnline,
+  devicesOffline,
+  temperature,
+}: DashboardStatsProps) {
+  const total = devicesOnline + devicesOffline;
+  const onlinePct = total > 0 ? Math.round((devicesOnline / total) * 100) : 0;
+
+  const stats = [
+    {
+      icon: Wifi,
+      chip: "bg-success/15 text-success",
+      value: `${devicesOnline}/${total}`,
+      unit: `· ${onlinePct}%`,
+      label: "Perangkat online",
+    },
+    {
+      icon: Zap,
+      chip: "bg-warning/15 text-warning",
+      value: formatNumber(energyKwh, 2),
+      unit: "kWh",
+      label: "Listrik hari ini",
+    },
+    {
+      icon: Droplets,
+      chip: "bg-info/15 text-info",
+      value: formatNumber(waterLiters),
+      unit: "L",
+      label: "Air hari ini",
+    },
+    {
+      icon: Thermometer,
+      chip: "bg-secondary/15 text-secondary",
+      value: typeof temperature === "number" ? temperature.toFixed(0) : "—",
+      unit: "°C",
+      label: "Suhu ruang",
+    },
+  ];
+
   return (
-    <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm transition-transform duration-200 hover:-translate-y-0.5">
-      <div className="text-primary-foreground/90">{icon}</div>
-      <p className="mt-1.5 text-lg font-bold leading-none">
-        {value}
-        <span className="ml-0.5 text-xs font-medium text-primary-foreground/70">
-          {unit}
-        </span>
-      </p>
-      <p className="mt-1 text-[10px] text-primary-foreground/70">{label}</p>
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {stats.map((s) => (
+        <Card key={s.label} padding="md" interactive className="flex items-center gap-3">
+          <div
+            className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+              s.chip
+            )}
+          >
+            <s.icon className="h-5 w-5" aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xl font-bold leading-none text-foreground">
+              {s.value}
+              <span className="ml-1 text-xs font-medium text-muted">{s.unit}</span>
+            </p>
+            <p className="mt-1 truncate text-xs text-muted">{s.label}</p>
+          </div>
+        </Card>
+      ))}
     </div>
   );
 }

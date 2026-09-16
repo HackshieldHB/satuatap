@@ -8,7 +8,7 @@ import { useHomeEvents } from "@/hooks/useHomeEvents";
 import { useHomes } from "@/hooks/useHomes";
 import { getGreeting } from "@/lib/utils";
 import { QUICK_ACTIONS } from "@/data/mock";
-import { DashboardHero } from "@/components/home/HomeStatusCard";
+import { DashboardHero, DashboardStats } from "@/components/home/HomeStatusCard";
 import { QuickActions } from "@/components/home/QuickActions";
 import { ScenesSection } from "@/components/home/ScenesSection";
 import { EcoScoreCard } from "@/components/home/EcoScoreCard";
@@ -97,10 +97,14 @@ export default function DashboardPage() {
         homeName={homeName}
         statusMessage={dashboard.statusMessage}
         statusType={statusType}
+      />
+
+      <DashboardStats
         energyKwh={dashboard.energy.todayKwh}
         waterLiters={dashboard.water.todayLiters}
         devicesOnline={dashboard.devicesOnline}
         devicesOffline={dashboard.devicesOffline}
+        temperature={dashboard.environment.temperature}
       />
 
       <AdSlot ads={heroAds} />
