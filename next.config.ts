@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Compression is handled by the reverse proxy (Caddy `encode zstd gzip`).
+  // Letting Next ALSO gzip caused a double-handling bug where the proxy served
+  // a decompressed body while keeping `Content-Encoding: gzip`, which browsers
+  // reject (net::ERR_FAILED → unstyled page). Serve plain; the proxy compresses.
+  compress: false,
   // Allow the app to be reached through a Cloudflare quick tunnel in dev
   // (used for sharing a mobile test link). Harmless in production.
   allowedDevOrigins: ["*.trycloudflare.com"],
