@@ -29,6 +29,11 @@
     scroll-behavior: smooth;
   }
 
+  ::selection {
+    background-color: rgba(79, 150, 144, 0.22);
+    color: rgb(var(--color-foreground));
+  }
+
   body {
     background-color: rgb(var(--color-background));
     /* Fresh green atmospheric wash: airy ivory base with soft sage + teal + mint
