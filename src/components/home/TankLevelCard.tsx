@@ -4,9 +4,9 @@ import type { TankReading } from "@/services/telemetry.service";
 
 /** Blue when healthy, amber when getting low, red when near-empty. */
 function levelStyle(pct: number): { text: string; fill: string; label: string } {
-  if (pct <= 20) return { text: "text-error", fill: "#D68A7C", label: "Hampir habis" };
-  if (pct <= 45) return { text: "text-warning", fill: "#D9A65C", label: "Menipis" };
-  return { text: "text-info", fill: "#7DA0C4", label: "Aman" };
+  if (pct <= 20) return { text: "text-error", fill: "#EF7775", label: "Hampir habis" };
+  if (pct <= 45) return { text: "text-warning", fill: "#F2A84B", label: "Menipis" };
+  return { text: "text-info", fill: "#5CA7D5", label: "Aman" };
 }
 
 function sinceLabel(iso: string): string {

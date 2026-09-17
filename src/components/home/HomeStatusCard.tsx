@@ -70,7 +70,7 @@ export function DashboardHero({
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "linear-gradient(115deg, rgba(58,46,34,0.9) 0%, rgba(72,58,44,0.58) 48%, rgba(96,80,60,0.3) 100%)",
+            "linear-gradient(115deg, rgba(18,46,44,0.9) 0%, rgba(31,95,91,0.55) 48%, rgba(79,150,144,0.28) 100%)",
         }}
         aria-hidden
       />

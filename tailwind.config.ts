@@ -10,40 +10,44 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // SATU ATAP "Warm Modern Smart Living" palette — muted taupe/brown
-        // primary over warm cream, with sage / blue-grey / peach as balanced
-        // supporting tones. No single dominant colour; semantic accents stay.
+        // SATU ATAP "Fresh Green Modern Smart Living" palette — layered teal/
+        // sage/mint over airy ivory, with soft pastel semantic accents.
         primary: {
-          DEFAULT: "#7E6C57", // Muted taupe-brown
+          DEFAULT: "#4F9690", // Primary Teal
           foreground: "#FFFFFF",
-          hover: "#665845", // Deeper warm brown
-          light: "#F0EAE1",
+          hover: "#1F5F5B", // Deep Teal
+          light: "#E1EFEB", // Pale Mint
         },
         secondary: {
-          DEFAULT: "#7E97A4", // Muted blue-grey
+          DEFAULT: "#5E938B", // Readable muted sage-teal
           foreground: "#FFFFFF",
-          hover: "#6A828E",
-          light: "#ECF1F3",
+          hover: "#4C7A73",
+          light: "#EDF5F1", // Mist Green
         },
         accent: {
-          DEFAULT: "#E4B48C", // Warm peach
-          foreground: "#3A332A",
+          DEFAULT: "#A8C9BE", // Soft Sage (decorative)
+          foreground: "#263B39",
         },
         success: {
-          DEFAULT: "#7E9E76", // Muted green — online/active/done
-          light: "#ECF1E8",
+          DEFAULT: "#65A77B", // Success Green — online/active/done
+          light: "#E7F0EA",
         },
         info: {
-          DEFAULT: "#7DA0C4", // Soft blue — water/internet/in-progress
-          light: "#EBF1F7",
+          DEFAULT: "#5CA7D5", // Soft Blue — water/internet/info
+          light: "#E6F1F9",
         },
         warning: {
-          DEFAULT: "#D9A65C", // Warm amber — warning/proses/pending
-          light: "#FAF2E2",
+          DEFAULT: "#F2A84B", // Soft Amber — electricity/warning
+          light: "#FDF1E1",
         },
         error: {
-          DEFAULT: "#D68A7C", // Soft coral — offline/nonaktif/critical
-          light: "#FBEEEB",
+          DEFAULT: "#EF7775", // Soft Coral — offline/error/destructive
+          light: "#FCEBEA",
+        },
+        // Smart / automation surfaces.
+        ai: {
+          DEFAULT: "#8583D9", // Soft Violet
+          light: "#ECEBF8",
         },
         background: "rgb(var(--color-background) / <alpha-value>)",
         surface: "rgb(var(--color-surface) / <alpha-value>)",

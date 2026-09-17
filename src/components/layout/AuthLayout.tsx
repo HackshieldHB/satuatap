@@ -7,19 +7,19 @@ interface AuthLayoutProps {
 }
 
 const lightVars = {
-  "--color-background": "245 239 231",
-  "--color-surface": "251 248 243",
-  "--color-foreground": "51 47 40",
-  "--color-muted": "138 129 117",
-  "--color-border": "231 224 214",
+  "--color-background": "248 247 242",
+  "--color-surface": "252 252 249",
+  "--color-foreground": "38 59 57",
+  "--color-muted": "107 123 120",
+  "--color-border": "216 226 222",
   colorScheme: "light",
   background:
-    "radial-gradient(50rem 38rem at 100% 0%, #f4ece1 0%, transparent 58%), radial-gradient(46rem 38rem at 0% 100%, #eef0ec 0%, transparent 58%), #fbf8f3",
+    "radial-gradient(50rem 38rem at 100% 0%, #e6f1ea 0%, transparent 58%), radial-gradient(46rem 38rem at 0% 100%, #edf5f1 0%, transparent 58%), #fcfcf9",
 } as React.CSSProperties;
 
 export function AuthLayout({ children, className }: AuthLayoutProps) {
   return (
-    <div className="min-h-screen w-full bg-[#2E2822] lg:grid lg:grid-cols-[1.05fr_1fr]">
+    <div className="min-h-screen w-full bg-[#16302E] lg:grid lg:grid-cols-[1.05fr_1fr]">
       {/* LEFT — immersive warm residential hero (desktop only) */}
       <aside className="relative hidden overflow-hidden lg:block">
         <div
@@ -32,7 +32,7 @@ export function AuthLayout({ children, className }: AuthLayoutProps) {
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(180deg, rgba(46,40,34,0.42) 0%, rgba(46,40,34,0.12) 34%, rgba(38,32,26,0.78) 100%)",
+              "linear-gradient(180deg, rgba(16,40,38,0.4) 0%, rgba(16,40,38,0.1) 34%, rgba(18,52,49,0.8) 100%)",
           }}
           aria-hidden
         />
@@ -88,7 +88,7 @@ export function AuthLayout({ children, className }: AuthLayoutProps) {
         {/* mobile-only warm accent bar */}
         <div
           className="absolute inset-x-0 top-0 h-1.5 lg:hidden"
-          style={{ background: "linear-gradient(90deg,#7E6C57,#C9A87F,#E4B48C)" }}
+          style={{ background: "linear-gradient(90deg,#1F5F5B,#4F9690,#A8C9BE)" }}
           aria-hidden
         />
         {children}

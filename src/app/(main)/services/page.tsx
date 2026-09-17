@@ -18,7 +18,7 @@ export default function ServicesPage() {
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(110deg, rgba(58,46,34,0.86) 0%, rgba(72,58,44,0.5) 55%, rgba(96,80,60,0.24) 100%)",
+              "linear-gradient(110deg, rgba(18,46,44,0.86) 0%, rgba(31,95,91,0.5) 55%, rgba(79,150,144,0.22) 100%)",
           }}
           aria-hidden
         />

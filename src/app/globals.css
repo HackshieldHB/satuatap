@@ -5,22 +5,22 @@
 @layer base {
   :root {
     /* Semantic colors as RGB channels so Tailwind opacity modifiers work. */
-    /* Warm Modern Smart Living: warm cream canvas, warm-charcoal ink, ivory cards. */
-    --color-background: 245 239 231; /* Warm cream #F5EFE7 */
-    --color-surface: 251 248 243; /* Warm ivory #FBF8F3 */
-    --color-foreground: 51 47 40; /* Warm charcoal #332F28 */
-    --color-muted: 138 129 117; /* Warm grey-brown #8A8175 */
-    --color-border: 231 224 214; /* Warm-grey border #E7E0D6 */
+    /* Fresh Green Smart Living: airy ivory canvas, green-charcoal ink, soft-white cards. */
+    --color-background: 248 247 242; /* Warm Ivory #F8F7F2 */
+    --color-surface: 252 252 249; /* Soft White #FCFCF9 */
+    --color-foreground: 38 59 57; /* Green-charcoal #263B39 */
+    --color-muted: 107 123 120; /* Secondary green-grey #6B7B78 */
+    --color-border: 216 226 222; /* Soft green-grey #D8E2DE */
     color-scheme: light;
   }
 
   .dark {
-    /* Warm deep-brown dark surfaces (avoids a cold/harsh dark). */
-    --color-background: 36 31 26; /* #241F1A */
-    --color-surface: 46 40 34; /* #2E2822 */
-    --color-foreground: 233 228 220;
-    --color-muted: 168 158 146;
-    --color-border: 66 58 50;
+    /* Deep green-charcoal dark surfaces (green-tinted, not brown/cold). */
+    --color-background: 22 33 31; /* #16211F */
+    --color-surface: 30 44 42; /* #1E2C2A */
+    --color-foreground: 230 238 235;
+    --color-muted: 150 167 163;
+    --color-border: 55 70 66;
     color-scheme: dark;
   }
 
@@ -31,13 +31,13 @@
 
   body {
     background-color: rgb(var(--color-background));
-    /* Warm atmospheric multi-color wash: cream base with subtle peach + sage +
-       blue-grey blobs. Dimensional & homey, never a flat single colour. */
+    /* Fresh green atmospheric wash: airy ivory base with soft sage + teal + mint
+       blobs. Dimensional & natural, never a flat single colour. */
     background-image:
-      radial-gradient(circle at 12% 8%, rgba(232, 190, 160, 0.36), transparent 34%),
-      radial-gradient(circle at 88% 12%, rgba(176, 203, 193, 0.32), transparent 36%),
-      radial-gradient(circle at 50% 98%, rgba(181, 203, 216, 0.28), transparent 42%),
-      linear-gradient(135deg, #f5efe7 0%, #f2e8de 38%, #e8eee8 68%, #e3ebee 100%);
+      radial-gradient(circle at 12% 18%, rgba(168, 201, 190, 0.38), transparent 32%),
+      radial-gradient(circle at 88% 12%, rgba(121, 173, 165, 0.26), transparent 35%),
+      radial-gradient(circle at 72% 90%, rgba(203, 225, 217, 0.34), transparent 38%),
+      linear-gradient(135deg, #f8f7f2 0%, #edf5f1 32%, #e1efeb 65%, #cbe1d9 100%);
     background-attachment: fixed;
     background-repeat: no-repeat;
     color: rgb(var(--color-foreground));
@@ -46,11 +46,11 @@
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
-  /* Dark mode keeps warm deep-brown; only a whisper of ambient color. */
+  /* Dark mode keeps deep green-charcoal; only a whisper of ambient color. */
   .dark body {
     background-image:
-      radial-gradient(circle at 12% 8%, rgba(200, 160, 120, 0.1), transparent 40%),
-      radial-gradient(circle at 88% 96%, rgba(150, 168, 176, 0.1), transparent 42%);
+      radial-gradient(circle at 12% 18%, rgba(79, 150, 144, 0.12), transparent 40%),
+      radial-gradient(circle at 88% 92%, rgba(121, 173, 165, 0.1), transparent 42%);
   }
 
   *:focus-visible {
@@ -75,15 +75,15 @@
   }
 
   .ai-gradient {
-    /* AI surfaces lean warm cream → soft violet-blue. */
-    background: linear-gradient(135deg, #f3ece2 0%, #ecedf5 100%);
+    /* AI surfaces lean soft violet → mint. */
+    background: linear-gradient(135deg, #ecebf8 0%, #e6f1ea 100%);
   }
 
   .dark .ai-gradient {
     background: linear-gradient(
       135deg,
-      rgba(200, 168, 130, 0.14) 0%,
-      rgba(140, 150, 185, 0.14) 100%
+      rgba(133, 131, 217, 0.16) 0%,
+      rgba(121, 173, 165, 0.14) 100%
     );
   }
 
