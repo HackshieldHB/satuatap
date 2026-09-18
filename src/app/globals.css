@@ -36,13 +36,16 @@
 
   body {
     background-color: rgb(var(--color-background));
-    /* Fresh green atmospheric wash: airy ivory base with soft sage + teal + mint
-       blobs. Dimensional & natural, never a flat single colour. */
+    /* Fresh green atmospheric wash — multi-tone & dimensional: green stays
+       dominant (sage + mint) but warm ivory / cream / a whisper of beige & peach
+       keep it from reading as one flat mint. Visible yet subtle, seamless. */
     background-image:
-      radial-gradient(circle at 12% 18%, rgba(168, 201, 190, 0.38), transparent 32%),
-      radial-gradient(circle at 88% 12%, rgba(121, 173, 165, 0.26), transparent 35%),
-      radial-gradient(circle at 72% 90%, rgba(203, 225, 217, 0.34), transparent 38%),
-      linear-gradient(135deg, #f8f7f2 0%, #edf5f1 32%, #e1efeb 65%, #cbe1d9 100%);
+      radial-gradient(circle at 10% 14%, rgba(168, 201, 190, 0.44), transparent 34%),
+      radial-gradient(circle at 90% 8%, rgba(203, 225, 217, 0.44), transparent 32%),
+      radial-gradient(circle at 84% 86%, rgba(242, 237, 230, 0.62), transparent 42%),
+      radial-gradient(circle at 16% 92%, rgba(221, 212, 201, 0.34), transparent 38%),
+      radial-gradient(circle at 58% 46%, rgba(233, 200, 170, 0.09), transparent 55%),
+      linear-gradient(150deg, #f8f7f2 0%, #edf5f1 26%, #e1efeb 50%, #e9f0ec 72%, #f4efe7 100%);
     background-attachment: fixed;
     background-repeat: no-repeat;
     color: rgb(var(--color-foreground));

@@ -37,34 +37,40 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   return (
-    <div className="min-h-screen isolate">
-      {/* Botanical decorative accent (behind content, desktop only) — reference feel. */}
+    <div className="min-h-screen">
+      {/* Botanical accents — blended into the atmospheric background (not pasted).
+          mix-blend multiply drops the asset's light backdrop into the page, and a
+          soft radial mask feathers the edges so there is no rectangular boundary. */}
       <div
         aria-hidden
-        className="pointer-events-none fixed bottom-0 left-0 -z-10 hidden h-60 w-60 opacity-90 lg:left-[236px] lg:block"
+        className="pointer-events-none fixed -bottom-8 left-0 -z-10 hidden h-[22rem] w-[22rem] lg:left-[210px] lg:block"
         style={{
           backgroundImage: "url('/assets/27-leaves-bottom.png')",
           backgroundSize: "contain",
           backgroundPosition: "bottom left",
           backgroundRepeat: "no-repeat",
+          mixBlendMode: "multiply",
+          opacity: 0.62,
           WebkitMaskImage:
-            "radial-gradient(130% 120% at 22% 82%, #000 42%, transparent 74%)",
+            "radial-gradient(72% 72% at 30% 72%, #000 24%, transparent 66%)",
           maskImage:
-            "radial-gradient(130% 120% at 22% 82%, #000 42%, transparent 74%)",
+            "radial-gradient(72% 72% at 30% 72%, #000 24%, transparent 66%)",
         }}
       />
       <div
         aria-hidden
-        className="pointer-events-none fixed -right-8 top-16 -z-10 hidden h-52 w-52 opacity-70 xl:block"
+        className="pointer-events-none fixed -right-10 -top-8 -z-10 hidden h-[24rem] w-[24rem] lg:block"
         style={{
           backgroundImage: "url('/assets/08-leaves.png')",
           backgroundSize: "contain",
           backgroundPosition: "top right",
           backgroundRepeat: "no-repeat",
+          mixBlendMode: "multiply",
+          opacity: 0.55,
           WebkitMaskImage:
-            "radial-gradient(120% 120% at 78% 22%, #000 40%, transparent 72%)",
+            "radial-gradient(72% 72% at 72% 26%, #000 22%, transparent 64%)",
           maskImage:
-            "radial-gradient(120% 120% at 78% 22%, #000 40%, transparent 72%)",
+            "radial-gradient(72% 72% at 72% 26%, #000 22%, transparent 64%)",
         }}
       />
       {isOffline && <OfflineBanner />}
