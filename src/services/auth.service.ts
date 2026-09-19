@@ -15,6 +15,28 @@ const STORAGE_KEY = "huni_session";
 const OTP_CODE = "123456";
 const MOCK_TOKEN = "mock-jwt-token";
 
+// Decode the `exp` (seconds since epoch) out of a JWT without verifying it — we
+// only need to know if it is already past so we don't strand the user on a
+// broken dashboard with a dead token. Returns null for non-JWT tokens (e.g. the
+// mock token) or anything unparseable, which are treated as "no expiry here".
+function decodeJwtExp(token: string): number | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(base64)) as { exp?: number };
+    return typeof payload.exp === "number" ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isJwtExpired(token: string, skewMs = 0): boolean {
+  const exp = decodeJwtExp(token);
+  if (exp === null) return false;
+  return exp * 1000 - skewMs <= Date.now();
+}
+
 export class AuthService {
   async login(
     credentials: AuthCredentials
@@ -159,6 +181,14 @@ export class AuthService {
         localStorage.removeItem(STORAGE_KEY);
         return null;
       }
+      // Drop an expired real JWT. Otherwise the guard passes (a session exists),
+      // the app skips the login screen, and every API call 401s — the "logged
+      // in but dashboard is broken" dead zone. Clearing it forces a clean
+      // re-login instead.
+      if (session.token && session.token !== MOCK_TOKEN && isJwtExpired(session.token)) {
+        localStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
       return session;
     } catch {
       return null;
@@ -173,6 +203,25 @@ export class AuthService {
   logout(): void {
     if (typeof window === "undefined") return;
     localStorage.removeItem(STORAGE_KEY);
+  }
+
+  // Sliding session: while the current token is still valid, ask the API for a
+  // fresh one so an active user's session keeps rolling forward and they are not
+  // forced to log in again every time the original token ages out. No-ops in
+  // mock mode, without a real token, or if the token is already expired (the
+  // 401 handler / getStoredSession will have cleared it by then).
+  async refreshToken(): Promise<void> {
+    if (useMockData) return;
+    const session = this.getStoredSession();
+    if (!session?.token || session.token === MOCK_TOKEN) return;
+    if (isJwtExpired(session.token)) return;
+    const res = await apiFetch<{ token: string }>("/v1/auth/refresh", {
+      method: "POST",
+    });
+    if (res.success && res.data?.token) {
+      const current = this.getStoredSession();
+      if (current) this.saveSession({ ...current, token: res.data.token });
+    }
   }
 
   updateSelectedHome(homeId: string): void {

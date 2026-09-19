@@ -20,6 +20,23 @@ function token(): string | null {
   }
 }
 
+// A 401 on any non-login endpoint means the stored token is no longer accepted
+// by the API (expired, revoked, or the server's JWT secret rotated). Clear the
+// dead session and send the user to the login screen once, instead of leaving
+// them "logged in" on a dashboard where every request silently fails.
+function handleUnauthorized(path: string): void {
+  if (typeof window === "undefined") return;
+  if (path.startsWith("/v1/auth/login")) return; // bad credentials, not a dead session
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+  if (!window.location.pathname.startsWith("/login")) {
+    window.location.replace("/login");
+  }
+}
+
 function withAuth(init: RequestInit): Headers {
   const headers = new Headers(init.headers);
   if (!headers.has("content-type") && init.body) {
@@ -59,6 +76,7 @@ export async function apiFetch<T>(
     }
     if (res.status < 500) {
       setLocalMode(false);
+      if (res.status === 401) handleUnauthorized(path);
       return { success: false, error: json.error ?? `HTTP ${res.status}` };
     }
     throw new Error(json.error ?? `HTTP ${res.status}`);
