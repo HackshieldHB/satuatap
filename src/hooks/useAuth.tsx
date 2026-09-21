@@ -38,9 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshSession();
     setIsLoading(false);
-    // Roll the session forward while it's still valid so an active user isn't
-    // forced to log in again once the original token ages out.
-    void authService.refreshToken().then(() => refreshSession());
   }, [refreshSession]);
 
   const logout = useCallback(() => {

@@ -53,7 +53,7 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrors({});
 
-    const result = await login({ email, password });
+    const result = await login({ email, password }, remember);
     setIsLoading(false);
 
     if (!result.success) {
@@ -91,6 +91,7 @@ export default function LoginPage() {
             <Input
               label="Email / Nomor Telepon"
               type="email"
+              name="email"
               placeholder="nama@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -100,6 +101,7 @@ export default function LoginPage() {
             <Input
               label="Kata Sandi"
               type="password"
+              name="password"
               placeholder="Minimal 8 karakter"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

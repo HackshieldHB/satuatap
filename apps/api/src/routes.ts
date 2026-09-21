@@ -210,7 +210,11 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
       return reply.code(401).send({ success: false, error: "Email atau kata sandi salah." });
     }
-    const token = await reply.jwtSign({ sub: user.id, email: user.email }, { expiresIn: "30d" });
+    // Short-lived by default for security; "Ingat saya" opts into a few days.
+    const token = await reply.jwtSign(
+      { sub: user.id, email: user.email },
+      { expiresIn: parsed.data.remember ? "3d" : "5h" }
+    );
     const membership = await prisma.membership.findFirst({ where: { userId: user.id } });
     await audit(user.id, "auth.login", "User", user.id);
     return {
@@ -229,16 +233,6 @@ export async function registerRoutes(app: FastifyInstance) {
         selectedHomeId: membership?.homeId ?? "home-1",
       },
     };
-  });
-
-  // Sliding session: re-issue a fresh 30d token for a caller who still holds a
-  // valid one, so an active user's session keeps rolling and they aren't forced
-  // to log in again when the original token ages out.
-  app.post("/v1/auth/refresh", { preHandler: authenticate }, async (req, reply) => {
-    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (!user) return reply.code(401).send({ success: false, error: "Unauthorized" });
-    const token = await reply.jwtSign({ sub: user.id, email: user.email }, { expiresIn: "30d" });
-    return { success: true, data: { token } };
   });
 
   app.get("/v1/auth/me", { preHandler: authenticate }, async (req) => {

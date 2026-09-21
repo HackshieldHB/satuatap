@@ -8,10 +8,26 @@ const STORAGE_KEY = "huni_session";
 const CLOUD_TIMEOUT_MS = 10_000;
 const EDGE_TIMEOUT_MS = 3_000;
 
+// The session lives in localStorage (remember me) OR sessionStorage (this
+// browsing session only), so read from whichever holds it.
+function rawSession(): string | null {
+  try {
+    const local = localStorage.getItem(STORAGE_KEY);
+    if (local) return local;
+  } catch {
+    /* ignore */
+  }
+  try {
+    return sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 function token(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = rawSession();
     if (!raw) return null;
     const session = JSON.parse(raw) as { token?: string };
     return session.token ?? null;
@@ -29,6 +45,11 @@ function handleUnauthorized(path: string): void {
   if (path.startsWith("/v1/auth/login")) return; // bad credentials, not a dead session
   try {
     localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
   } catch {
     /* ignore */
   }

@@ -39,14 +39,15 @@ export function isJwtExpired(token: string, skewMs = 0): boolean {
 
 export class AuthService {
   async login(
-    credentials: AuthCredentials
+    credentials: AuthCredentials,
+    remember = false
   ): Promise<ApiResponse<AuthSession>> {
     if (!useMockData) {
       const res = await apiFetch<AuthSession>("/v1/auth/login", {
         method: "POST",
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({ ...credentials, remember }),
       });
-      if (res.success && res.data) this.saveSession(res.data);
+      if (res.success && res.data) this.saveSession(res.data, remember);
       return res;
     }
 
@@ -70,7 +71,7 @@ export class AuthService {
       selectedHomeId: "home-1",
     };
 
-    this.saveSession(session);
+    this.saveSession(session, remember);
     return { success: true, data: session };
   }
 
@@ -167,9 +168,30 @@ export class AuthService {
     return { success: true, data: updated };
   }
 
+  // Which store currently holds the session. "Ingat saya" (remember me) picks
+  // between them: localStorage = persistent (survives closing the browser →
+  // auto-resume the dashboard), sessionStorage = this browsing session only
+  // (cleared on close → a fresh visit lands on the login form).
+  private currentStore(): Storage | null {
+    if (typeof window === "undefined") return null;
+    try {
+      if (window.localStorage.getItem(STORAGE_KEY)) return window.localStorage;
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (window.sessionStorage.getItem(STORAGE_KEY)) return window.sessionStorage;
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
   getStoredSession(): AuthSession | null {
     if (typeof window === "undefined") return null;
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const store = this.currentStore();
+    if (!store) return null;
+    const raw = store.getItem(STORAGE_KEY);
     if (!raw) return null;
     try {
       const session = JSON.parse(raw) as AuthSession;
@@ -178,7 +200,7 @@ export class AuthService {
       // not clear it, so the app would sit "logged in" yet every request fails
       // and the dashboard loads forever. Drop it and force a real re-login.
       if (!useMockData && session.token === MOCK_TOKEN) {
-        localStorage.removeItem(STORAGE_KEY);
+        store.removeItem(STORAGE_KEY);
         return null;
       }
       // Drop an expired real JWT. Otherwise the guard passes (a session exists),
@@ -186,7 +208,7 @@ export class AuthService {
       // in but dashboard is broken" dead zone. Clearing it forces a clean
       // re-login instead.
       if (session.token && session.token !== MOCK_TOKEN && isJwtExpired(session.token)) {
-        localStorage.removeItem(STORAGE_KEY);
+        store.removeItem(STORAGE_KEY);
         return null;
       }
       return session;
@@ -195,32 +217,43 @@ export class AuthService {
     }
   }
 
-  saveSession(session: AuthSession): void {
+  // `persistent` undefined = keep the session in whichever store it already
+  // lives (so refresh/role/home updates don't silently change its lifetime);
+  // true = localStorage (remember me), false = sessionStorage (this session).
+  saveSession(session: AuthSession, persistent?: boolean): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    let store: Storage;
+    if (persistent === undefined) {
+      store = this.currentStore() ?? window.localStorage;
+    } else {
+      store = persistent ? window.localStorage : window.sessionStorage;
+    }
+    try {
+      store.setItem(STORAGE_KEY, JSON.stringify(session));
+    } catch {
+      /* ignore */
+    }
+    // Keep a single source of truth so a stale copy in the other store can't
+    // resurrect a session the user meant to leave behind.
+    const other = store === window.localStorage ? window.sessionStorage : window.localStorage;
+    try {
+      other.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
   }
 
   logout(): void {
     if (typeof window === "undefined") return;
-    localStorage.removeItem(STORAGE_KEY);
-  }
-
-  // Sliding session: while the current token is still valid, ask the API for a
-  // fresh one so an active user's session keeps rolling forward and they are not
-  // forced to log in again every time the original token ages out. No-ops in
-  // mock mode, without a real token, or if the token is already expired (the
-  // 401 handler / getStoredSession will have cleared it by then).
-  async refreshToken(): Promise<void> {
-    if (useMockData) return;
-    const session = this.getStoredSession();
-    if (!session?.token || session.token === MOCK_TOKEN) return;
-    if (isJwtExpired(session.token)) return;
-    const res = await apiFetch<{ token: string }>("/v1/auth/refresh", {
-      method: "POST",
-    });
-    if (res.success && res.data?.token) {
-      const current = this.getStoredSession();
-      if (current) this.saveSession({ ...current, token: res.data.token });
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    try {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
     }
   }
 

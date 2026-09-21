@@ -117,6 +117,9 @@ export const patchDeviceConfigBodySchema = z.object({
 export const loginBodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+  // "Ingat saya" — extends the session token from the short default to a few
+  // days. Optional so older clients still authenticate.
+  remember: z.boolean().optional(),
 });
 
 export const automationTriggerSchema = z.object({

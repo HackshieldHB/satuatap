@@ -13,6 +13,7 @@ function fakeJwt(expSeconds: number): string {
 describe("authService", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it("logs in with the demo credentials", async () => {
@@ -42,6 +43,39 @@ describe("authService", () => {
     expect(authService.getStoredSession()).not.toBeNull();
     authService.logout();
     expect(authService.getStoredSession()).toBeNull();
+  });
+
+  it("without remember, keeps the session only for this browsing session", async () => {
+    sessionStorage.clear();
+    await authService.login(
+      { email: DEMO_CREDENTIALS.email, password: DEMO_CREDENTIALS.password },
+      false
+    );
+    // In sessionStorage (cleared when the browser closes → next visit = login),
+    // not in localStorage.
+    expect(sessionStorage.getItem("huni_session")).not.toBeNull();
+    expect(localStorage.getItem("huni_session")).toBeNull();
+    expect(authService.getStoredSession()).not.toBeNull();
+  });
+
+  it("with remember, persists the session across browser restarts", async () => {
+    sessionStorage.clear();
+    await authService.login(
+      { email: DEMO_CREDENTIALS.email, password: DEMO_CREDENTIALS.password },
+      true
+    );
+    expect(localStorage.getItem("huni_session")).not.toBeNull();
+    expect(sessionStorage.getItem("huni_session")).toBeNull();
+  });
+
+  it("logout clears both stores", async () => {
+    await authService.login(
+      { email: DEMO_CREDENTIALS.email, password: DEMO_CREDENTIALS.password },
+      false
+    );
+    authService.logout();
+    expect(localStorage.getItem("huni_session")).toBeNull();
+    expect(sessionStorage.getItem("huni_session")).toBeNull();
   });
 
   it("rejects an incorrect OTP code", async () => {
