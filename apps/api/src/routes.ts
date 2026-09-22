@@ -97,6 +97,7 @@ import {
 } from "./ingest.js";
 import { createCommand } from "./automation.js";
 import { hub, type AppEvent } from "./events.js";
+import { notify } from "./notify.js";
 import { mapHome, mapRoom, mapDeviceForUi } from "./mappers.js";
 import { config } from "./config.js";
 import { periodWindow } from "./rollup.js";
@@ -1537,7 +1538,12 @@ export async function registerRoutes(app: FastifyInstance) {
       status?: "open" | "acknowledged" | "resolved";
     }> }).items ?? [];
     for (const item of items) {
+      // Only push a notification for a genuinely new alert so re-pushed
+      // (idempotent) alerts from the gateway don't spam members.
+      let isNew = true;
       if (item.id) {
+        const existing = await prisma.alert.findUnique({ where: { id: item.id } });
+        isNew = !existing;
         await prisma.alert.upsert({
           where: { id: item.id },
           create: {
@@ -1569,6 +1575,10 @@ export async function registerRoutes(app: FastifyInstance) {
             status: item.status ?? "open",
           },
         });
+      }
+      if (isNew) {
+        const icon = item.severity === "critical" ? "🚨" : item.severity === "warning" ? "⚠️" : "ℹ️";
+        await notify(item.homeId, { title: `${icon} ${item.title}`, body: item.message, tag: "alert" });
       }
     }
     return { success: true };

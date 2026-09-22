@@ -8,6 +8,7 @@ import {
 import { evaluateAutomations } from "./automation.js";
 import { applyPrepaidUsage } from "./prepaid.js";
 import { hub } from "./events.js";
+import { notify } from "./notify.js";
 
 function hourStart(d: Date): Date {
   const x = new Date(d);
@@ -412,6 +413,11 @@ export async function applyDeviceStatus(input: {
         message: `${device.name} tidak merespons.`,
       },
     });
+    await notify(input.homeId, {
+      title: "⚠️ Perangkat offline",
+      body: `${device.name} tidak merespons.`,
+      tag: "alert",
+    });
   }
 
   hub.publish({
@@ -522,6 +528,11 @@ export async function applyNodeAvailability(input: {
         title: "Node offline",
         message: `Node ${input.nodeId} tidak merespons (${devices.length} perangkat).`,
       },
+    });
+    await notify(input.homeId, {
+      title: "⚠️ Node offline",
+      body: `Node ${input.nodeId} tidak merespons (${devices.length} perangkat).`,
+      tag: "alert",
     });
   }
 
