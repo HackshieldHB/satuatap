@@ -30,7 +30,13 @@ import {
   createParcelBodySchema,
   bindTelegramBodySchema,
   setRoleBodySchema,
+  setUserRoleBodySchema,
+  menuVisibilityUpdateSchema,
   deviceMaintenanceBodySchema,
+  APP_ROLES,
+  MENU_CATALOG,
+  effectiveMenuVisibility,
+  type AppRoleName,
   type DeviceTypeId,
 } from "@satu-atap/shared";
 import {
@@ -82,7 +88,7 @@ import {
   parsePeriod,
   monthStart,
 } from "./billing.js";
-import { authenticate, requireHomeRole, requireInternalKey, audit } from "./auth.js";
+import { authenticate, requireAdmin, requireHomeRole, requireInternalKey, audit } from "./auth.js";
 import {
   ingestTelemetry,
   applyDeviceStatus,
@@ -259,6 +265,91 @@ export async function registerRoutes(app: FastifyInstance) {
       data: { role: parsed.data.role },
     });
     return { success: true, data: { role: user.role } };
+  });
+
+  // Effective menu visibility for the CURRENT caller's role: code defaults
+  // merged with any admin overrides. The client uses the visible keys to filter
+  // its navigation. NOTE: this only drives which menu shortcuts appear — real
+  // access control stays enforced per-route by the membership/role checks.
+  async function overridesForRole(role: AppRoleName): Promise<Record<string, boolean>> {
+    const rows = await prisma.menuVisibility.findMany({ where: { role } });
+    const overrides: Record<string, boolean> = {};
+    for (const r of rows) overrides[r.menuKey] = r.visible;
+    return overrides;
+  }
+
+  app.get("/v1/menu-config", { preHandler: authenticate }, async (req) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user.sub } });
+    const role = user.role as AppRoleName;
+    const menus = effectiveMenuVisibility(role, await overridesForRole(role));
+    return { success: true, data: { role, menus } };
+  });
+
+  // Admin: full role × menu matrix + the catalog, for the admin console.
+  app.get("/v1/admin/menus", { preHandler: [authenticate, requireAdmin] }, async () => {
+    const matrix: Record<string, Record<string, boolean>> = {};
+    for (const role of APP_ROLES) {
+      matrix[role] = effectiveMenuVisibility(role, await overridesForRole(role));
+    }
+    return {
+      success: true,
+      data: {
+        roles: APP_ROLES,
+        catalog: MENU_CATALOG.map((m) => ({ key: m.key, label: m.label })),
+        matrix,
+      },
+    };
+  });
+
+  // Admin: persist menu-visibility overrides (only the entries that changed).
+  app.put("/v1/admin/menus", { preHandler: [authenticate, requireAdmin] }, async (req, reply) => {
+    const parsed = menuVisibilityUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    const validKeys = new Set(MENU_CATALOG.map((m) => m.key));
+    for (const u of parsed.data.updates) {
+      if (!validKeys.has(u.menuKey)) {
+        return reply.code(400).send({ success: false, error: `Unknown menu: ${u.menuKey}` });
+      }
+    }
+    await prisma.$transaction(
+      parsed.data.updates.map((u) =>
+        prisma.menuVisibility.upsert({
+          where: { role_menuKey: { role: u.role, menuKey: u.menuKey } },
+          update: { visible: u.visible },
+          create: { role: u.role, menuKey: u.menuKey, visible: u.visible },
+        })
+      )
+    );
+    await audit(req.user.sub, "admin.menus.update", "MenuVisibility", undefined, {
+      count: parsed.data.updates.length,
+    });
+    return { success: true, data: { updated: parsed.data.updates.length } };
+  });
+
+  // Admin: list users so the admin can assign each one a role.
+  app.get("/v1/admin/users", { preHandler: [authenticate, requireAdmin] }, async () => {
+    const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" } });
+    return {
+      success: true,
+      data: users.map((u) => ({
+        id: u.id,
+        fullName: u.fullName,
+        email: u.email,
+        role: u.role,
+      })),
+    };
+  });
+
+  // Admin: set another user's global role.
+  app.put("/v1/admin/users/:id/role", { preHandler: [authenticate, requireAdmin] }, async (req, reply) => {
+    const parsed = setUserRoleBodySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    const { id } = req.params as { id: string };
+    const target = await prisma.user.findUnique({ where: { id } });
+    if (!target) return reply.code(404).send({ success: false, error: "User not found" });
+    const user = await prisma.user.update({ where: { id }, data: { role: parsed.data.role } });
+    await audit(req.user.sub, "admin.user.role", "User", id, { role: parsed.data.role });
+    return { success: true, data: { id: user.id, role: user.role } };
   });
 
   app.get("/v1/homes", { preHandler: authenticate }, async (req) => {

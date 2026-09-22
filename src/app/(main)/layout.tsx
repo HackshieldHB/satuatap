@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { AppGuard } from "@/components/layout/AuthGuard";
+import { MenuConfigProvider } from "@/hooks/useMenuConfig";
 import { NotificationProvider } from "@/hooks/useNotifications";
 import { CartProvider } from "@/hooks/useCart";
 import { OrdersProvider } from "@/hooks/useOrders";
@@ -13,6 +14,7 @@ export default function MainLayout({
 }) {
   return (
     <AppGuard>
+      <MenuConfigProvider>
       <NotificationProvider>
         <CartProvider>
           <OrdersProvider>
@@ -24,6 +26,7 @@ export default function MainLayout({
           </OrdersProvider>
         </CartProvider>
       </NotificationProvider>
+      </MenuConfigProvider>
     </AppGuard>
   );
 }

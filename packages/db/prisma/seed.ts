@@ -43,6 +43,12 @@ async function main() {
     update: { passwordHash, role: "operator" },
     create: { id: "user-operator", email: "teknisi@satuatap.id", passwordHash, fullName: "Teknisi Demo", phone: "081200000002", role: "operator" },
   });
+  // App administrator — manages the role→menu policy and user roles.
+  await prisma.user.upsert({
+    where: { email: "admin@satuatap.id" },
+    update: { passwordHash, role: "admin" },
+    create: { id: "user-admin", email: "admin@satuatap.id", passwordHash, fullName: "Admin Aplikasi", phone: "081200000003", role: "admin" },
+  });
 
   await prisma.organization.upsert({
     where: { id: "org-1" },
@@ -152,6 +158,13 @@ async function main() {
       where: { userId_homeId: { userId: "user-operator", homeId } },
       update: { role: "VIEWER" },
       create: { userId: "user-operator", homeId, role: "VIEWER" },
+    });
+    // Admin is app-level; a VIEWER membership just lets the app shell resolve a
+    // selected home so dashboards don't error while they use the admin console.
+    await prisma.membership.upsert({
+      where: { userId_homeId: { userId: "user-admin", homeId } },
+      update: { role: "VIEWER" },
+      create: { userId: "user-admin", homeId, role: "VIEWER" },
     });
   }
 

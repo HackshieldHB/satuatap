@@ -43,6 +43,17 @@ enum UserRole {
   resident
   manager
   operator
+  admin
+}
+
+// Admin-editable role → menu visibility policy. Rows are OVERRIDES over the code
+// defaults (packages/shared MENU_CATALOG); an absent row = use the default.
+model MenuVisibility {
+  role    UserRole
+  menuKey String
+  visible Boolean  @default(true)
+
+  @@id([role, menuKey])
 }
 
 enum CommandStatus {

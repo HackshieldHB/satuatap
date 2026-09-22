@@ -28,6 +28,16 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply) {
   }
 }
 
+// App-administrator gate. Runs after `authenticate`; loads the caller and
+// rejects anyone whose global role is not `admin`. Menu/role administration is
+// admin-only.
+export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
+  const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+  if (!user || user.role !== "admin") {
+    return reply.code(403).send({ success: false, error: "Forbidden" });
+  }
+}
+
 export function requireInternalKey(req: FastifyRequest, reply: FastifyReply) {
   const key = req.headers["x-internal-key"];
   if (key !== config.internalApiKey) {

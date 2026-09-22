@@ -222,9 +222,27 @@ export const createParcelBodySchema = z.object({
 
 // ─── Roles & maintenance ─────────────────────────────────────────────────────
 
-export const userRoleSchema = z.enum(["resident", "manager", "operator"]);
+export const userRoleSchema = z.enum(["resident", "manager", "operator", "admin"]);
 
 export const setRoleBodySchema = z.object({ role: userRoleSchema });
+
+// ─── Admin: role → menu visibility ───────────────────────────────────────────
+
+// Admin edits the menu matrix by sending the entries they changed.
+export const menuVisibilityUpdateSchema = z.object({
+  updates: z
+    .array(
+      z.object({
+        role: userRoleSchema,
+        menuKey: z.string().min(1).max(64),
+        visible: z.boolean(),
+      })
+    )
+    .min(1)
+    .max(500),
+});
+
+export const setUserRoleBodySchema = z.object({ role: userRoleSchema });
 
 export const deviceMaintenanceBodySchema = z.object({
   underMaintenance: z.boolean(),

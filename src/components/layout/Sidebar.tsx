@@ -4,17 +4,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { computeActive, MAIN_NAV, BOTTOM_NAV, MOBILE_NAV, navForRole } from "@/lib/nav";
+import { computeActive, MAIN_NAV, BOTTOM_NAV, MOBILE_NAV, navForRole, navByVisibleKeys } from "@/lib/nav";
 import { useAuth } from "@/hooks/useAuth";
+import { useMenuConfig } from "@/hooks/useMenuConfig";
 import { Logo } from "./Logo";
 import { useState } from "react";
-
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const { menus } = useMenuConfig();
   const [collapsed, setCollapsed] = useState(false);
-  const mainNav = navForRole(MAIN_NAV, user?.role);
+  const mainNav = menus
+    ? navByVisibleKeys(MAIN_NAV, menus, user?.role)
+    : navForRole(MAIN_NAV, user?.role);
 
   const isActive = (href: string) => computeActive(href, pathname);
 
@@ -92,7 +95,10 @@ export function Sidebar() {
 export function BottomNav() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const items = navForRole(MOBILE_NAV, user?.role);
+  const { menus } = useMenuConfig();
+  const items = menus
+    ? navByVisibleKeys(MOBILE_NAV, menus, user?.role)
+    : navForRole(MOBILE_NAV, user?.role);
 
   const isActive = (href: string) => computeActive(href, pathname);
 

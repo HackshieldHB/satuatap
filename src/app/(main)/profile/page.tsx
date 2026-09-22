@@ -47,6 +47,7 @@ const ROLE_OPTIONS: { role: import("@/types").AppRole; label: string }[] = [
   { role: "resident", label: "Penghuni" },
   { role: "manager", label: "Pengelola" },
   { role: "operator", label: "Operator" },
+  { role: "admin", label: "Admin" },
 ];
 
 export default function ProfilePage() {
