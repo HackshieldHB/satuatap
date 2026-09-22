@@ -1,23 +1,44 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@satu-atap/db";
 import { computeCounterDelta, ingestTelemetry } from "./ingest.js";
 
 const DEVICE_ID = "energy-main";
-const DEVICE_B = "energy-ac";
 const HOME_ID = "home-1";
 const WINDOW = new Date("2099-06-01T00:00:00.000Z");
 
+// A dedicated, non-seeded device for the out-of-order/shuffled cases. Those rely
+// on `precedingRawCounter`, which looks back across ALL history — so if we reused
+// a real seeded device (e.g. energy-ac) its accumulated simulator telemetry from
+// the past would become the "predecessor" of our future-dated test readings and
+// corrupt the first deltas. A synthetic device has no such history.
+const DEVICE_OO = "test-oo-energy";
+
 async function cleanup() {
+  // energy-main: only the synthetic future-window rows, so real data is kept.
   await prisma.telemetryReading.deleteMany({
-    where: { deviceId: { in: [DEVICE_ID, DEVICE_B] }, recordedAt: { gte: WINDOW } },
+    where: { deviceId: DEVICE_ID, recordedAt: { gte: WINDOW } },
   });
   await prisma.telemetryAggregate.deleteMany({
-    where: { deviceId: { in: [DEVICE_ID, DEVICE_B] }, periodStart: { gte: WINDOW } },
+    where: { deviceId: DEVICE_ID, periodStart: { gte: WINDOW } },
   });
   await prisma.deviceCounterSnapshot.deleteMany({
-    where: { deviceId: { in: [DEVICE_ID, DEVICE_B] }, metric: "energy_kwh" },
+    where: { deviceId: DEVICE_ID, metric: "energy_kwh" },
   });
+  // The synthetic device is ours alone — wipe everything for full isolation.
+  await prisma.telemetryReading.deleteMany({ where: { deviceId: DEVICE_OO } });
+  await prisma.telemetryAggregate.deleteMany({ where: { deviceId: DEVICE_OO } });
+  await prisma.deviceCounterSnapshot.deleteMany({ where: { deviceId: DEVICE_OO } });
 }
+
+beforeAll(async () => {
+  const room = await prisma.room.findFirst({ where: { homeId: HOME_ID } });
+  if (!room) throw new Error("seed home-1 rooms before running counter tests");
+  await prisma.device.upsert({
+    where: { id: DEVICE_OO },
+    update: {},
+    create: { id: DEVICE_OO, homeId: HOME_ID, roomId: room.id, type: "energy", name: "OO Test Energy" },
+  });
+});
 
 function hourStart(d: Date): string {
   const x = new Date(d);
@@ -77,6 +98,8 @@ describe("ingest counter deltas", () => {
 
   afterAll(async () => {
     await cleanup();
+    // Remove the synthetic device so it doesn't linger in the dev/demo DB.
+    await prisma.device.deleteMany({ where: { id: DEVICE_OO } });
   });
 
   it("day consumption from deltas equals last-first when no reset", async () => {
@@ -262,12 +285,12 @@ describe("ingest counter deltas", () => {
       const r = readings[i];
       await ingestTelemetry({
         homeId: HOME_ID,
-        deviceId: DEVICE_B,
+        deviceId: DEVICE_OO,
         recordedAt: r.recordedAt,
         metrics: { energy_kwh: r.energy_kwh },
       });
     }
-    const shuffled = await sumDeltas(DEVICE_B);
+    const shuffled = await sumDeltas(DEVICE_OO);
     expect(shuffled.sum).toBeCloseTo(ordered.sum, 6);
     expect(shuffled.sum).toBeCloseTo(readings[11].energy_kwh - readings[0].energy_kwh, 6);
     expect(Object.keys(shuffled.byHour).sort()).toEqual(Object.keys(ordered.byHour).sort());
