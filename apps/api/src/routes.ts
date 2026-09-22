@@ -355,6 +355,29 @@ export async function registerRoutes(app: FastifyInstance) {
     };
   });
 
+  // Admin: recent audit trail (who did what). Read-only governance view.
+  app.get("/v1/admin/audit", { preHandler: [authenticate, requireAdmin] }, async (req) => {
+    const q = req.query as { limit?: string };
+    const limit = Math.min(Math.max(Number(q.limit) || 100, 1), 200);
+    const rows = await prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      include: { actor: { select: { fullName: true, email: true } } },
+    });
+    return {
+      success: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        action: r.action,
+        entity: r.entity,
+        entityId: r.entityId,
+        metadata: r.metadata,
+        createdAt: r.createdAt.toISOString(),
+        actor: r.actor ? { fullName: r.actor.fullName, email: r.actor.email } : null,
+      })),
+    };
+  });
+
   // Admin: set another user's global role.
   app.put("/v1/admin/users/:id/role", { preHandler: [authenticate, requireAdmin] }, async (req, reply) => {
     const parsed = setUserRoleBodySchema.safeParse(req.body);

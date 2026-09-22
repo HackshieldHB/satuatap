@@ -7,12 +7,13 @@ import {
   adminService,
   type AdminMenuMatrix,
   type AdminUser,
+  type AuditEntry,
 } from "@/services/admin.service";
 import type { AppRole } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Check, Save, RotateCcw, Users } from "lucide-react";
+import { ShieldCheck, Check, Save, RotateCcw, Users, ScrollText } from "lucide-react";
 
 const ROLE_LABEL: Record<AppRole, string> = {
   resident: "Penghuni",
@@ -28,19 +29,22 @@ export default function AdminPage() {
   // Local editable copy of the matrix (role → menuKey → visible).
   const [draft, setDraft] = useState<Record<string, Record<string, boolean>>>({});
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [busyUser, setBusyUser] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [m, u] = await Promise.all([
+    const [m, u, a] = await Promise.all([
       adminService.getMenuMatrix(),
       adminService.getUsers(),
+      adminService.getAudit(50),
     ]);
     if (m.success && m.data) {
       setData(m.data);
       setDraft(structuredClone(m.data.matrix));
     }
     if (u.success && u.data) setUsers(u.data);
+    if (a.success && a.data) setAudit(a.data);
   }, []);
 
   useEffect(() => {
@@ -227,6 +231,40 @@ export default function AdminPage() {
           ))}
           {users.length === 0 && (
             <p className="text-sm text-muted py-4 text-center">Belum ada pengguna.</p>
+          )}
+        </div>
+      </Card>
+
+      {/* Audit trail */}
+      <Card className="p-4">
+        <h2 className="font-semibold flex items-center gap-2 mb-3">
+          <ScrollText className="h-4 w-4" /> Riwayat Aktivitas
+        </h2>
+        <div className="divide-y divide-border">
+          {audit.map((e) => (
+            <div key={e.id} className="flex items-start justify-between gap-3 py-2 text-sm">
+              <div className="min-w-0">
+                <p className="font-medium">
+                  <span className="text-primary">{e.action}</span>
+                  <span className="text-muted"> · {e.entity}{e.entityId ? ` (${e.entityId})` : ""}</span>
+                </p>
+                <p className="text-xs text-muted truncate">
+                  {e.actor ? e.actor.fullName : "sistem"}
+                  {e.metadata ? ` · ${JSON.stringify(e.metadata)}` : ""}
+                </p>
+              </div>
+              <time className="shrink-0 text-xs text-muted whitespace-nowrap">
+                {new Date(e.createdAt).toLocaleString("id-ID", {
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </time>
+            </div>
+          ))}
+          {audit.length === 0 && (
+            <p className="text-sm text-muted py-4 text-center">Belum ada aktivitas tercatat.</p>
           )}
         </div>
       </Card>

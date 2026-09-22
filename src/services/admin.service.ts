@@ -19,6 +19,16 @@ export interface AdminUser {
   role: AppRole;
 }
 
+export interface AuditEntry {
+  id: string;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  metadata: unknown;
+  createdAt: string;
+  actor: { fullName: string; email: string } | null;
+}
+
 export const adminService = {
   // Effective menu visibility for the current user's role.
   getMenuConfig(): Promise<ApiResponse<MenuConfig>> {
@@ -47,5 +57,9 @@ export const adminService = {
       method: "PUT",
       body: JSON.stringify({ role }),
     });
+  },
+
+  getAudit(limit = 100): Promise<ApiResponse<AuditEntry[]>> {
+    return apiFetch<AuditEntry[]>(`/v1/admin/audit?limit=${limit}`);
   },
 };
