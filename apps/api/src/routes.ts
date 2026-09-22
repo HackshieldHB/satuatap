@@ -260,10 +260,25 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post("/v1/auth/role", { preHandler: authenticate }, async (req, reply) => {
     const parsed = setRoleBodySchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ success: false, error: "Invalid payload" });
+    const me = await prisma.user.findUniqueOrThrow({ where: { id: req.user.sub } });
+    // Privilege-escalation guard: `admin` is powerful (menu policy + everyone's
+    // roles), so it can NEVER be self-assigned — only an existing admin grants
+    // it, via /v1/admin/users/:id/role.
+    if (parsed.data.role === "admin" && me.role !== "admin") {
+      return reply
+        .code(403)
+        .send({ success: false, error: "Role admin hanya bisa diberikan oleh administrator." });
+    }
+    // The self-service switch is a demo affordance; a real deployment disables
+    // it with DEMO_ROLE_SWITCH=false. Admins keep it regardless.
+    if (!config.demoRoleSwitch && me.role !== "admin") {
+      return reply.code(403).send({ success: false, error: "Ganti peran dinonaktifkan." });
+    }
     const user = await prisma.user.update({
       where: { id: req.user.sub },
       data: { role: parsed.data.role },
     });
+    await audit(req.user.sub, "auth.role.self", "User", req.user.sub, { role: parsed.data.role });
     return { success: true, data: { role: user.role } };
   });
 

@@ -8,4 +8,8 @@ export const config = {
   mqttUrl: process.env.MQTT_URL ?? "mqtt://127.0.0.1:1883",
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
   telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME ?? "",
+  // Demo affordance: let a signed-in user switch their own persona to preview
+  // each menu. Set DEMO_ROLE_SWITCH=false in a real deployment to disable it.
+  // `admin` can NEVER be self-assigned regardless of this flag.
+  demoRoleSwitch: process.env.DEMO_ROLE_SWITCH !== "false",
 };

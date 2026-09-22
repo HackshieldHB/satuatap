@@ -96,7 +96,9 @@ export default function ProfilePage() {
           <p className="text-xs text-muted">Ganti peran untuk melihat menu Penghuni, Pengelola, atau Operator.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {ROLE_OPTIONS.map((opt) => {
+          {/* `admin` can't be self-assigned (server rejects it) — only an admin
+              grants it, so hide the chip unless the user already is one. */}
+          {ROLE_OPTIONS.filter((o) => o.role !== "admin" || user?.role === "admin").map((opt) => {
             const active = (user?.role ?? "resident") === opt.role;
             return (
               <button
