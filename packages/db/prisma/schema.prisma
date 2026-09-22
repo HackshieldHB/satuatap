@@ -108,6 +108,21 @@ model User {
   acknowledged Alert[]      @relation("AlertAck")
   commands     Command[]
   telegram     TelegramLink?
+  passwordResets PasswordResetToken[]
+}
+
+// Single-use, time-limited password-reset tokens. Only a SHA-256 hash of the
+// token is stored, so a DB leak can't be used to reset anyone's password.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // Links a user to their Telegram chat so notifications can be pushed there.

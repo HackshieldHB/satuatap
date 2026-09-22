@@ -18,6 +18,9 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  // Demo fallback: without SMTP the API returns the reset token so we can show
+  // the reset link directly instead of "check your email".
+  const [resetLink, setResetLink] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,12 +46,15 @@ export default function ForgotPasswordPage() {
     setIsLoading(false);
 
     if (!result.success) {
-      setError(result.error || "Gagal mengirim kode.");
+      setError(result.error || "Gagal mengirim tautan.");
       return;
     }
 
+    const devToken = result.data?.devToken;
+    if (devToken) {
+      setResetLink(`/reset-password?token=${devToken}`);
+    }
     setSent(true);
-    setTimeout(() => router.push("/otp?flow=reset"), 1500);
   };
 
   return (
@@ -62,16 +68,28 @@ export default function ForgotPasswordPage() {
           <div className="space-y-1 mb-6">
             <h1 className="text-xl font-bold">Lupa kata sandi?</h1>
             <p className="text-sm text-muted">
-              Masukkan email atau nomor telepon untuk menerima kode verifikasi.
+              Masukkan email akunmu untuk menerima tautan atur ulang kata sandi.
             </p>
           </div>
 
           {sent ? (
-            <Alert
-              variant="success"
-              title="Kode terkirim"
-              message="Periksa email atau SMS kamu untuk kode verifikasi."
-            />
+            <div className="space-y-3">
+              <Alert
+                variant="success"
+                title="Tautan reset dikirim"
+                message="Jika email terdaftar, tautan untuk mengatur ulang kata sandi telah dikirim."
+              />
+              {resetLink && (
+                <div className="rounded-md border border-border bg-background p-3 text-sm">
+                  <p className="text-xs text-muted mb-2">
+                    Mode demo (email belum aktif) — lanjutkan lewat tautan ini:
+                  </p>
+                  <Button className="w-full" onClick={() => router.push(resetLink)}>
+                    Atur Ulang Kata Sandi
+                  </Button>
+                </div>
+              )}
+            </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && <Alert variant="error" message={error} />}
@@ -82,7 +100,7 @@ export default function ForgotPasswordPage() {
                 placeholder="nama@email.com atau 081234567890"
               />
               <Button type="submit" className="w-full" isLoading={isLoading}>
-                Kirim Kode Verifikasi
+                Kirim Tautan Reset
               </Button>
             </form>
           )}

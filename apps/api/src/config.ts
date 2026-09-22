@@ -12,4 +12,8 @@ export const config = {
   // each menu. Set DEMO_ROLE_SWITCH=false in a real deployment to disable it.
   // `admin` can NEVER be self-assigned regardless of this flag.
   demoRoleSwitch: process.env.DEMO_ROLE_SWITCH !== "false",
+  // Until SMTP is wired up, the password-reset endpoint returns the reset token
+  // in its response so the flow is usable in the demo. Set EXPOSE_RESET_TOKEN=
+  // false once real email delivery exists so tokens are never sent to the client.
+  exposeResetToken: process.env.EXPOSE_RESET_TOKEN !== "false",
 };

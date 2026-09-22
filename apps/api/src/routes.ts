@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma, Prisma } from "@satu-atap/db";
 import {
@@ -31,6 +32,8 @@ import {
   bindTelegramBodySchema,
   setRoleBodySchema,
   setUserRoleBodySchema,
+  forgotPasswordBodySchema,
+  resetPasswordBodySchema,
   menuVisibilityUpdateSchema,
   deviceMaintenanceBodySchema,
   APP_ROLES,
@@ -255,6 +258,46 @@ export async function registerRoutes(app: FastifyInstance) {
         createdAt: user.createdAt.toISOString(),
       },
     };
+  });
+
+  // Request a password reset. Always returns success so it can't be used to
+  // probe which emails have accounts. A single-use token (30 min) is minted and
+  // only its hash is stored. Until SMTP exists the raw token is returned in the
+  // response when EXPOSE_RESET_TOKEN is on, so the demo flow works.
+  app.post("/v1/auth/forgot", async (req, reply) => {
+    const parsed = forgotPasswordBodySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Email tidak valid." });
+    const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+    let devToken: string | undefined;
+    if (user) {
+      const raw = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(raw).digest("hex");
+      await prisma.passwordResetToken.create({
+        data: { userId: user.id, tokenHash, expiresAt: new Date(Date.now() + 30 * 60 * 1000) },
+      });
+      await audit(user.id, "auth.forgot", "User", user.id);
+      console.log(JSON.stringify({ msg: "password_reset_requested", email: user.email }));
+      if (config.exposeResetToken) devToken = raw;
+    }
+    return { success: true, data: { sent: true, ...(devToken ? { devToken } : {}) } };
+  });
+
+  // Consume a reset token and set a new password.
+  app.post("/v1/auth/reset", async (req, reply) => {
+    const parsed = resetPasswordBodySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: "Data tidak valid." });
+    const tokenHash = crypto.createHash("sha256").update(parsed.data.token).digest("hex");
+    const row = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+    if (!row || row.usedAt || row.expiresAt < new Date()) {
+      return reply.code(400).send({ success: false, error: "Token tidak valid atau kedaluwarsa." });
+    }
+    const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: row.userId }, data: { passwordHash } }),
+      prisma.passwordResetToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+    ]);
+    await audit(row.userId, "auth.reset", "User", row.userId);
+    return { success: true, data: { updated: true } };
   });
 
   // Demo affordance: switch the current user's app role to preview each menu.

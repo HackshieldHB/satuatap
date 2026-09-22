@@ -129,15 +129,28 @@ export class AuthService {
 
   async forgotPassword(
     identifier: string
-  ): Promise<ApiResponse<{ sent: true }>> {
+  ): Promise<ApiResponse<{ sent: true; devToken?: string }>> {
+    if (!useMockData) {
+      return apiFetch<{ sent: true; devToken?: string }>("/v1/auth/forgot", {
+        method: "POST",
+        body: JSON.stringify({ email: identifier }),
+      });
+    }
     await delay(600);
     sessionStorage.setItem("huni_reset_identifier", identifier);
     return { success: true, data: { sent: true } };
   }
 
   async resetPassword(
+    token: string,
     password: string
   ): Promise<ApiResponse<{ updated: true }>> {
+    if (!useMockData) {
+      return apiFetch<{ updated: true }>("/v1/auth/reset", {
+        method: "POST",
+        body: JSON.stringify({ token, password }),
+      });
+    }
     await delay(600);
 
     if (password.length < 8) {

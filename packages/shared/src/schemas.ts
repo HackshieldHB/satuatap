@@ -244,6 +244,15 @@ export const menuVisibilityUpdateSchema = z.object({
 
 export const setUserRoleBodySchema = z.object({ role: userRoleSchema });
 
+// ─── Password reset ──────────────────────────────────────────────────────────
+
+export const forgotPasswordBodySchema = z.object({ email: z.string().email() });
+
+export const resetPasswordBodySchema = z.object({
+  token: z.string().min(10),
+  password: z.string().min(8),
+});
+
 export const deviceMaintenanceBodySchema = z.object({
   underMaintenance: z.boolean(),
   note: z.string().max(300).optional(),

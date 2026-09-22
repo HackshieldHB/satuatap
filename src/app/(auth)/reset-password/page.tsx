@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Logo } from "@/components/layout/Logo";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -9,7 +10,9 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { authService } from "@/services/auth.service";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token") ?? "";
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -20,6 +23,7 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
 
+    if (!token) newErrors.form = "Tautan reset tidak valid. Minta tautan baru.";
     if (!password) newErrors.password = "Kata sandi wajib diisi.";
     else if (password.length < 8) newErrors.password = "Kata sandi minimal 8 karakter.";
     if (password !== confirmPassword)
@@ -29,7 +33,7 @@ export default function ResetPasswordPage() {
     if (Object.keys(newErrors).length > 0) return;
 
     setIsLoading(true);
-    const result = await authService.resetPassword(password);
+    const result = await authService.resetPassword(token, password);
     setIsLoading(false);
 
     if (!result.success) {
@@ -73,6 +77,13 @@ export default function ResetPasswordPage() {
         </div>
 
         {errors.form && <Alert variant="error" message={errors.form} className="mb-4" />}
+        {!token && !errors.form && (
+          <Alert
+            variant="error"
+            message="Tautan reset tidak valid atau tidak lengkap."
+            className="mb-4"
+          />
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
@@ -82,6 +93,7 @@ export default function ResetPasswordPage() {
             onChange={(e) => setPassword(e.target.value)}
             error={errors.password}
             placeholder="Minimal 8 karakter"
+            autoComplete="new-password"
           />
           <Input
             label="Konfirmasi Kata Sandi"
@@ -89,12 +101,27 @@ export default function ResetPasswordPage() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             error={errors.confirmPassword}
+            autoComplete="new-password"
           />
-          <Button type="submit" className="w-full" isLoading={isLoading}>
+          <Button type="submit" className="w-full" isLoading={isLoading} disabled={!token}>
             Perbarui Kata Sandi
           </Button>
         </form>
       </Card>
+
+      <p className="text-center text-sm text-muted">
+        <Link href="/login" className="font-medium text-primary hover:underline">
+          Kembali ke Login
+        </Link>
+      </p>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
