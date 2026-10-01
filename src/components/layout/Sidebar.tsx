@@ -28,8 +28,13 @@ export function Sidebar() {
         collapsed ? "w-[72px]" : "w-[260px]"
       )}
     >
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        {!collapsed && <Logo size="sm" />}
+      <div
+        className={cn(
+          "flex items-center justify-between p-4 border-b border-border",
+          collapsed && "flex-col gap-2 px-2"
+        )}
+      >
+        {collapsed ? <Logo size="sm" variant="mark" /> : <Logo size="sm" />}
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="touch-target flex items-center justify-center rounded-md hover:bg-background text-muted"

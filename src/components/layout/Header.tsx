@@ -24,12 +24,14 @@ export function MobileHeader() {
   return (
     <>
       <header className="lg:hidden sticky top-0 z-30 bg-surface/95 backdrop-blur-sm border-b border-border pt-safe-top">
-        <div className="flex items-center justify-between h-14 px-4">
-          <Logo size="sm" />
+        <div className="flex items-center justify-between gap-2 h-14 px-4">
+          {/* Narrow phones get the mark alone so the home picker keeps its room. */}
+          <Logo size="sm" variant="mark" className="shrink-0 min-[400px]:hidden" />
+          <Logo size="sm" className="shrink-0 hidden min-[400px]:inline-flex" />
 
           <button
             onClick={() => setShowHomePicker(true)}
-            className="flex items-center gap-1.5 rounded-md bg-background px-3 py-1.5 text-sm font-medium max-w-[140px]"
+            className="flex min-w-0 items-center gap-1.5 rounded-md bg-background px-3 py-1.5 text-sm font-medium max-w-[140px]"
             aria-label="Pilih rumah"
           >
             <span className="truncate">{selectedHome?.name ?? "Rumah"}</span>

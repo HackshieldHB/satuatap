@@ -1,7 +1,6 @@
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import type { AppRole } from "@/types";
 import {
-  Home,
   Cpu,
   DoorOpen,
   Bot,
@@ -29,12 +28,16 @@ import {
   Wrench,
   ShieldCheck,
 } from "lucide-react";
+import { BrandMark } from "@/components/layout/Logo";
 
 // `key` is the stable id shared with the backend menu-visibility policy.
 // `roles` is the built-in default persona mapping, used as a fallback when the
 // admin-configured menu policy hasn't loaded (offline/degraded); omitted =
 // visible to everyone.
-export type NavItem = { key: string; href: string; label: string; icon: LucideIcon; roles?: AppRole[] };
+// `icon` is a lucide icon or any icon-shaped component (the home item uses the
+// brand roof mark) — renderers only pass `className` + `aria-hidden`.
+export type NavIcon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+export type NavItem = { key: string; href: string; label: string; icon: NavIcon; roles?: AppRole[] };
 
 const RESIDENT: AppRole[] = ["resident"];
 const MANAGER: AppRole[] = ["manager"];
@@ -44,7 +47,7 @@ const OPERATOR: AppRole[] = ["operator", "manager"];
 const ADMIN: AppRole[] = ["admin"];
 
 export const MAIN_NAV: NavItem[] = [
-  { key: "home", href: "/", label: "Beranda", icon: Home },
+  { key: "home", href: "/", label: "Beranda", icon: BrandMark },
   // Manager / operator
   { key: "manage", href: "/manage", label: "Pengelola", icon: ClipboardList, roles: MANAGER },
   { key: "operator", href: "/operator", label: "Maintenance", icon: Wrench, roles: OPERATOR },
@@ -82,7 +85,7 @@ export const BOTTOM_NAV: NavItem[] = [
 ];
 
 export const MOBILE_NAV: NavItem[] = [
-  { key: "home", href: "/", label: "Beranda", icon: Home },
+  { key: "home", href: "/", label: "Beranda", icon: BrandMark },
   { key: "devices", href: "/devices", label: "Perangkat", icon: Cpu },
   { key: "alerts", href: "/alerts", label: "Alert", icon: Bell, roles: MGR_OP },
   { key: "payments", href: "/payments", label: "Bayar", icon: CreditCard, roles: RESIDENT },

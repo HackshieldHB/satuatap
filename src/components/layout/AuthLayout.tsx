@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Logo } from "./Logo";
 import { Leaf, Zap, Users } from "lucide-react";
 
 interface AuthLayoutProps {
@@ -38,14 +39,9 @@ export function AuthLayout({ children, className }: AuthLayoutProps) {
         />
 
         <div className="relative z-10 flex h-full flex-col justify-between p-10 text-white xl:p-14">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-              <Leaf className="h-5 w-5" />
-            </span>
-            <div className="leading-tight">
-              <p className="text-base font-extrabold tracking-tight">SATU ATAP</p>
-              <p className="text-[11px] font-medium text-white/75">Smart Living Ecosystem</p>
-            </div>
+          <div className="flex flex-col items-start gap-1.5">
+            <Logo size="md" tone="dark" className="drop-shadow-sm" />
+            <p className="text-[11px] font-medium tracking-wide text-white/75">Smart Living Ecosystem</p>
           </div>
 
           <div className="space-y-5">
@@ -84,6 +80,7 @@ export function AuthLayout({ children, className }: AuthLayoutProps) {
           className
         )}
         style={lightVars}
+        data-surface="light"
       >
         {/* mobile-only warm accent bar */}
         <div

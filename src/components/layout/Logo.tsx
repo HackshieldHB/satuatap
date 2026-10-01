@@ -1,52 +1,89 @@
 import Link from "next/link";
-import { Home } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Brand assets live in /public/brand (generated from the official logo pack):
+//   logo-horizontal.png       mark + dark-green wordmark (light surfaces)
+//   logo-horizontal-dark.png  same, wordmark recoloured light (dark surfaces)
+//   logo-mark.png             the roof mark alone
+// The wordmark swaps via the `.brand-logo-*` rules in globals.css, which also
+// keep the light version inside forced-light panels (`data-surface="light"`).
+const MARK_SRC = "/brand/logo-mark.png";
 
 interface LogoProps {
   size?: "sm" | "md" | "lg";
   showTagline?: boolean;
+  /** "full" = mark + wordmark; "mark" = roof mark only (compact slots). */
+  variant?: "full" | "mark";
+  /** Force a tone instead of following the theme (e.g. over a dark photo). */
+  tone?: "auto" | "light" | "dark";
   className?: string;
 }
 
 const sizes = {
-  sm: { text: "text-base", box: "h-7 w-7", icon: "h-4 w-4" },
-  md: { text: "text-xl", box: "h-9 w-9", icon: "h-5 w-5" },
-  lg: { text: "text-2xl", box: "h-11 w-11", icon: "h-6 w-6" },
+  sm: { full: "h-7", mark: "h-7" },
+  md: { full: "h-9", mark: "h-9" },
+  lg: { full: "h-12", mark: "h-11" },
 };
 
-export function Logo({ size = "md", showTagline, className }: LogoProps) {
+export function Logo({
+  size = "md",
+  showTagline,
+  variant = "full",
+  tone = "auto",
+  className,
+}: LogoProps) {
   const s = sizes[size];
+  const img = "w-auto select-none transition-transform duration-300 group-hover:scale-[1.03]";
   return (
     <Link
       href="/"
-      className={cn("group inline-flex items-center gap-2", className)}
-      aria-label="SATU ATAP"
+      className={cn("group inline-flex flex-col gap-1", className)}
+      aria-label="SATU ATAP — Beranda"
     >
-      <span
-        className={cn(
-          "flex items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-primary-foreground shadow-card",
-          "transition-transform duration-300 group-hover:scale-105 group-hover:-rotate-6",
-          s.box
-        )}
-      >
-        <Home className={cn("transition-transform group-hover:scale-110", s.icon)} />
-      </span>
-      <span className="inline-flex flex-col leading-tight">
-        <span
-          className={cn(
-            "font-extrabold tracking-tight bg-gradient-to-r from-primary via-primary to-secondary bg-clip-text text-transparent",
-            s.text
+      {variant === "mark" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={MARK_SRC} alt="SATU ATAP" className={cn(img, s.mark)} draggable={false} />
+      ) : (
+        <>
+          {tone !== "dark" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src="/brand/logo-horizontal.png"
+              alt="SATU ATAP"
+              className={cn(img, s.full, tone === "auto" && "brand-logo-light")}
+              draggable={false}
+            />
           )}
-        >
-          SATU ATAP
-        </span>
-        {showTagline && (
-          <span className="text-xs text-muted mt-0.5">
-            Satu atap, semua terkendali.
-          </span>
-        )}
-      </span>
+          {tone !== "light" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src="/brand/logo-horizontal-dark.png"
+              alt={tone === "dark" ? "SATU ATAP" : ""}
+              aria-hidden={tone === "auto" || undefined}
+              className={cn(img, s.full, tone === "auto" && "brand-logo-dark")}
+              draggable={false}
+            />
+          )}
+        </>
+      )}
+      {showTagline && (
+        <span className="text-xs text-muted">Satu atap, semua terkendali.</span>
+      )}
     </Link>
+  );
+}
+
+/** The roof mark as a nav icon — drop-in for a lucide icon (`className` sizes it). */
+export function BrandMark({ className }: { className?: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={MARK_SRC}
+      alt=""
+      aria-hidden
+      className={cn("object-contain select-none", className)}
+      draggable={false}
+    />
   );
 }
 

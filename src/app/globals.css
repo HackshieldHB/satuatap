@@ -87,6 +87,19 @@
     background: linear-gradient(135deg, #ecebf8 0%, #e6f1ea 100%);
   }
 
+  /* Brand wordmark: dark-green ink on light surfaces, light ink in dark mode —
+     except inside forced-light panels (AuthLayout), which stay light. */
+  .brand-logo-dark,
+  .dark .brand-logo-light,
+  .dark [data-surface="light"] .brand-logo-dark {
+    display: none;
+  }
+
+  .dark .brand-logo-dark,
+  .dark [data-surface="light"] .brand-logo-light {
+    display: block;
+  }
+
   .dark .ai-gradient {
     background: linear-gradient(
       135deg,
