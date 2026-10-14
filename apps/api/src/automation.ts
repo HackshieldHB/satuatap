@@ -29,14 +29,19 @@ function buildContext(lastMotionAt: Record<string, number>, at = new Date()): Ev
 }
 
 async function loadLastMotionAt(homeId: string): Promise<Record<string, number>> {
-  const rows = await prisma.motionEvent.findMany({
+  // Only the latest timestamp per device is needed. Aggregate in Postgres
+  // (one row per device) instead of shipping every MotionEvent row to Node —
+  // a home accumulates hundreds of thousands of events, and findMany-all would
+  // deserialize them all on each automation tick (pins CPU, balloons memory).
+  const rows = await prisma.motionEvent.groupBy({
+    by: ["deviceId"],
     where: { homeId },
-    orderBy: { occurredAt: "desc" },
-    select: { deviceId: true, occurredAt: true },
+    _max: { occurredAt: true },
   });
   const map: Record<string, number> = {};
   for (const row of rows) {
-    if (map[row.deviceId] == null) map[row.deviceId] = row.occurredAt.getTime();
+    const ts = row._max.occurredAt;
+    if (ts) map[row.deviceId] = ts.getTime();
   }
   return map;
 }

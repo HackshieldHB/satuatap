@@ -378,6 +378,7 @@ model MotionEvent {
   occurredAt DateTime
 
   @@index([homeId, occurredAt])
+  @@index([deviceId, occurredAt])
 }
 
 model LightingState {
